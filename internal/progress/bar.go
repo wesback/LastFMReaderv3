@@ -59,9 +59,10 @@ func NewRealProgressBar(total int64, desc string, opts ...Option) *ProgressBar {
 		progressbar.OptionShowCount(),
 		progressbar.OptionSetPredictTime(options.ShowETA),
 		progressbar.OptionSetElapsedTime(options.ShowElapsed),
+		progressbar.OptionFullWidth(), // Use full terminal width when width=0
 	}
 
-	// Only set width if explicitly specified (0 means auto-detect, don't pass to library)
+	// Only set width if explicitly specified (overrides OptionFullWidth)
 	if options.Width > 0 {
 		barOpts = append(barOpts, progressbar.OptionSetWidth(options.Width))
 	}
