@@ -459,6 +459,85 @@ az network nsg rule create \
 
 ---
 
+## Alternative Authentication Methods
+
+While Managed Identity is recommended for production, the tool supports multiple authentication methods:
+
+### Connection String Authentication
+
+Use connection string for development or when managed identity is not available:
+
+```bash
+# Get connection string
+CONN_STR=$(az storage account show-connection-string \
+  --name lastfmstorage \
+  --resource-group lastfm-rg \
+  --query connectionString -o tsv)
+
+# Deploy with connection string
+az container create \
+  --resource-group lastfm-rg \
+  --name lastfm-sync \
+  --image lastfm-sync:latest \
+  --environment-variables \
+    LASTFM_API_KEY="$LASTFM_API_KEY" \
+    AZURE_STORAGE_CONNECTION_STRING="$CONN_STR" \
+  --command-line "/app/lastfm-sync fetch --user alice --output azure --azure-container scrobbles --azure-auth connstr"
+```
+
+### Account Key Authentication
+
+Use storage account key directly:
+
+```bash
+# Get storage account key
+STORAGE_KEY=$(az storage account keys list \
+  --resource-group lastfm-rg \
+  --account-name lastfmstorage \
+  --query "[0].value" -o tsv)
+
+# Deploy with account key
+az container create \
+  --resource-group lastfm-rg \
+  --name lastfm-sync \
+  --image lastfm-sync:latest \
+  --environment-variables \
+    LASTFM_API_KEY="$LASTFM_API_KEY" \
+    AZURE_STORAGE_ACCOUNT=lastfmstorage \
+    AZURE_STORAGE_ACCOUNT_KEY="$STORAGE_KEY" \
+  --command-line "/app/lastfm-sync fetch --user alice --output azure --azure-container scrobbles --azure-auth key"
+```
+
+### SAS Token Authentication
+
+Use SAS token for time-limited access:
+
+```bash
+# Generate SAS token (valid for 24 hours)
+SAS_TOKEN=$(az storage container generate-sas \
+  --account-name lastfmstorage \
+  --name scrobbles \
+  --permissions rwdl \
+  --expiry $(date -u -d "24 hours" '+%Y-%m-%dT%H:%MZ') \
+  --output tsv)
+
+# Construct container URL with SAS token
+CONTAINER_URL="https://lastfmstorage.blob.core.windows.net/scrobbles?$SAS_TOKEN"
+
+# Deploy with SAS token
+az container create \
+  --resource-group lastfm-rg \
+  --name lastfm-sync \
+  --image lastfm-sync:latest \
+  --environment-variables \
+    LASTFM_API_KEY="$LASTFM_API_KEY" \
+  --command-line "/app/lastfm-sync fetch --user alice --output azure --azure-container-url \"$CONTAINER_URL\" --azure-auth sas"
+```
+
+> **Security Note**: For production deployments, prefer Managed Identity (`--azure-auth mi` or `--azure-auth default`) over connection strings, account keys, or SAS tokens. These credential-based methods should only be used for development or when Managed Identity is not available.
+
+---
+
 ## Persistent Storage
 
 ### Azure File Share (for local output mode)

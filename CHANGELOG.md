@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Feature 005: Console Progress Bar
+
+- **Progress Bar Implementation** (`internal/progress/`)
+  - Real-time progress tracking with visual feedback using `github.com/schollz/progressbar/v3`
+  - ETA calculation based on actual throughput
+  - Speed metrics (scrobbles per second)
+  - Current/total scrobble counts with percentage
+  - Automatic terminal width detection
+  - Thread-safe progress updates for concurrent operations
+  - Configurable via `--no-progress` flag or `LASTFM_NO_PROGRESS` environment variable
+  - Graceful degradation for non-interactive terminals (CI/CD pipelines)
+
+- **Progress Reporting**
+  - Factory pattern for creating progress bars vs no-op implementations
+  - `ProgressReporter` interface for flexible progress tracking
+  - Progress state tracking (completed, in-progress, pending)
+  - Terminal capability detection using `golang.org/x/term`
+  - Comprehensive test coverage including terminal emulation tests
+
+### Added - Feature 004: Normalized Title Field
+
+- **Title Normalization** (`internal/normalize/`)
+  - Automatic removal of track title annotations for better data quality
+  - Pattern-based removal of:
+    - Remaster/Remastered annotations (e.g., "2009 Remaster", "Remastered 2015")
+    - Live performance markers (e.g., "Live at Wembley", "Live 1969")
+    - Version/edit labels (e.g., "Radio Edit", "Extended Version")
+    - Date/year markers in parentheses or brackets
+    - Remix labels (e.g., "Dave's Remix")
+    - Featuring/collaboration markers (e.g., "feat. Artist", "with Orchestra")
+  - Thread-safe global feature flag for enabling/disabling normalization
+  - Preserves original title in `track` field while adding clean `normalized_title` field
+  - Configurable minimum length protection to avoid over-aggressive cleaning
+  - DEBUG-level logging for title changes (when logger provided)
+  - YAML-based configuration for customizable patterns (`internal/normalize/patterns.go`)
+
+- **Scrobble Model Enhancement** (`internal/models/scrobble.go`)
+  - Added `normalized_title` field to all NDJSON output
+  - Automatic normalization in `NewScrobble` constructor
+  - Original title preserved for audit trail and debugging
+
 ### Added - Feature 002: Containerization & Documentation
 
 - **Configuration Documentation** (`docs/configuration.md`)
@@ -86,6 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - DefaultAzureCredential (recommended for Azure VMs/AKS)
     - Managed Identity (workload identity)
     - Connection string
+    - Account key (SharedKeyCredential)
     - SAS token
   - Time-partitioned blob paths for efficient data organization
   - Separate watermark blob storage for state management

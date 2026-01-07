@@ -46,6 +46,7 @@ For more complex setups, see the [Environment Variables](#environment-variables)
 | `LASTFM_LOG_LEVEL` | string | `info` | Logging level. Options: `info`, `debug`. |
 | `LASTFM_STATE` | string | `~/.lastfm` | Directory for storing state (watermarks, local output files). |
 | `LASTFM_CONFIG` | string | none | Path to config file. If not set, searches `./`, `~/.lastfm/`, `/etc/lastfm/` for `config.yaml`. |
+| `LASTFM_NO_PROGRESS` | boolean | `false` | Disable console progress bar. Useful for CI/CD pipelines or when redirecting output. |
 
 ### Azure Storage Variables
 
@@ -53,10 +54,11 @@ Required only when using `--output azure`:
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `AZURE_STORAGE_ACCOUNT` | string | none | Azure Storage account name. Used with `--azure-auth default` or `--azure-auth mi`. |
+| `AZURE_STORAGE_ACCOUNT` | string | none | Azure Storage account name. Used with `--azure-auth default`, `--azure-auth mi`, or `--azure-auth key`. |
 | `AZURE_STORAGE_CONNECTION_STRING` | string | none | **Sensitive**. Full Azure Storage connection string. Used with `--azure-auth connstr`. |
+| `AZURE_STORAGE_ACCOUNT_KEY` | string | none | **Sensitive**. Azure Storage account key. Used with `--azure-auth key`. |
 
-> **Security Note**: Never commit `AZURE_STORAGE_CONNECTION_STRING` to version control. Use environment variables or Azure Key Vault.
+> **Security Note**: Never commit `AZURE_STORAGE_CONNECTION_STRING` or `AZURE_STORAGE_ACCOUNT_KEY` to version control. Use environment variables or Azure Key Vault.
 
 ---
 
@@ -95,9 +97,10 @@ Required when `--output azure`:
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--azure-container` | string | none | **Required**. Azure Blob Storage container name. |
-| `--azure-account` | string | `$AZURE_STORAGE_ACCOUNT` | Storage account name (alternative to connection string). |
-| `--azure-prefix` | string | `lastfm/` | Blob prefix (folder path). Blobs written to `{prefix}{user}/{year}/{month}/{timestamp}.ndjson`. |
-| `--azure-auth` | string | `default` | Authentication method. Options: `default` (DefaultAzureCredential), `mi` (Managed Identity), `connstr` (Connection String), `sas` (SAS Token). |
+| `--azure-account` | string | `$AZURE_STORAGE_ACCOUNT` | Storage account name (required for `default`, `mi`, and `key` auth). |
+| `--azure-prefix` | string | `lastfm/` | Blob prefix (folder path). Blobs written to `{prefix}dt=YYYY-MM-DD/{user}-YYYYMMDD-HHMMSS.ndjson`. |
+| `--azure-auth` | string | `default` | Authentication method. Options: `default`, `mi`, `connstr`, `key`, `sas`. |
+| `--azure-account-key` | string | none | **Sensitive**. Storage account key (required for `--azure-auth key`). |
 | `--azure-container-url` | string | none | Full container URL with SAS token (for `--azure-auth sas`). |
 
 **Azure Authentication Methods**:
@@ -105,6 +108,7 @@ Required when `--output azure`:
 - **`default`** (recommended for Azure VMs/AKS): Uses Azure SDK's DefaultAzureCredential chain (tries Managed Identity, Azure CLI, Environment, etc.).
 - **`mi`**: Explicitly uses Managed Identity (Azure VMs, AKS, Container Instances with identity).
 - **`connstr`**: Uses connection string from `AZURE_STORAGE_CONNECTION_STRING` environment variable.
+- **`key`**: Uses storage account key from `--azure-account-key` flag or `AZURE_STORAGE_ACCOUNT_KEY` environment variable. Requires `--azure-account`.
 - **`sas`**: Uses SAS token embedded in `--azure-container-url`.
 
 #### Watermark Storage
@@ -126,6 +130,7 @@ Required when `--output azure`:
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--log-level` | string | `info` | Logging verbosity. Options: `info`, `debug`. |
+| `--no-progress` | boolean | `false` | Disable console progress bar. Useful for CI/CD pipelines or when redirecting output. |
 | `--dry-run` | boolean | `false` | Preview mode. Fetches data but doesn't write to storage or update watermarks. |
 
 ---
@@ -292,6 +297,20 @@ lastfm-sync fetch --user alice \
   --azure-auth mi
 ```
 
+### Azure with Account Key
+
+```bash
+export LASTFM_API_KEY="your-api-key"
+export AZURE_STORAGE_ACCOUNT_KEY="your-account-key"
+lastfm-sync fetch --user alice \
+  --output azure \
+  --azure-container scrobbles \
+  --azure-account mystorageaccount \
+  --azure-auth key
+# Or pass key directly via flag:
+# --azure-account-key "your-account-key"
+```
+
 ### Time Range Fetch
 
 ```bash
@@ -317,6 +336,43 @@ export LASTFM_API_KEY="your-api-key"
 lastfm-sync fetch --user alice --log-level debug
 # Enables verbose logging for troubleshooting
 ```
+
+---
+
+## Output Format
+
+### NDJSON Structure
+
+Each scrobble is written as a single line of JSON with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `username` | string | Last.fm username |
+| `artist` | string | Artist name |
+| `track` | string | Original track name from Last.fm (may include annotations) |
+| `normalized_title` | string | Clean track title with annotations removed (Live, Remastered, featuring, etc.) |
+| `album` | string | Album name |
+| `uts` | int64 | Unix timestamp (seconds since epoch) |
+| `local_time` | string | Human-readable UTC timestamp (RFC3339 format) |
+| `mbid` | string | MusicBrainz ID (omitted if null) |
+| `source` | string | Data source (always "lastfm") |
+| `ingested_at` | string | UTC timestamp when record was created (RFC3339) |
+| `raw` | object | Original Last.fm API response for debugging |
+
+**Example:**
+```json
+{"username":"alice","artist":"The Beatles","track":"Come Together - Remastered","normalized_title":"Come Together","album":"Abbey Road","uts":1704067200,"local_time":"2024-01-01T00:00:00Z","source":"lastfm","ingested_at":"2024-01-06T14:30:22Z","raw":{}}
+```
+
+**Note on normalized_title**: This field is automatically generated by removing common annotations like:
+- Remaster/Remastered annotations (e.g., "2009 Remaster", "Remastered 2015")
+- Live performance markers (e.g., "Live at Wembley", "Live 1969")
+- Version/edit labels (e.g., "Radio Edit", "Extended Version")
+- Date/year markers in parentheses or brackets
+- Remix labels (e.g., "Dave's Remix")
+- Featuring/collaboration markers (e.g., "feat. Artist", "with Orchestra")
+
+This normalization improves data quality for aggregation and matching while preserving the original title in the `track` field.
 
 ---
 

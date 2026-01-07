@@ -12,9 +12,11 @@
 ✅ **Rate Limit Compliant**: 3 QPS throttling with Retry-After header support  
 ✅ **Production Ready**: Exponential backoff, timeout handling, structured logging  
 ✅ **Dry-Run Mode**: Test configurations without consuming API quota  
-✅ **Azure Integration**: DefaultAzureCredential, managed identity, SAS tokens, connection strings  
+✅ **Azure Integration**: DefaultAzureCredential, managed identity, SAS tokens, connection strings, account keys  
 ✅ **Secret Redaction**: Automatic credential masking in logs  
-✅ **NDJSON Output**: Newline-delimited JSON for easy streaming and processing
+✅ **NDJSON Output**: Newline-delimited JSON for easy streaming and processing  
+✅ **Console Progress Bar**: Real-time progress tracking with ETA, speed, and scrobble count  
+✅ **Title Normalization**: Automatic removal of annotations (Live, Remastered, Featuring) for better data quality
 
 ## Quick Start
 
@@ -148,8 +150,9 @@ Flags:
   Azure Options:
       --azure-container string   Azure container name
       --azure-prefix string      Azure blob prefix (default: "lastfm/")
-      --azure-auth string        Auth method: default, mi, connstr, sas (default: "default")
+      --azure-auth string        Auth method: default, mi, connstr, key, sas (default: "default")
       --azure-account string     Azure storage account name
+      --azure-account-key string Azure storage account key (for key auth)
       --azure-container-url string  Full container URL (for SAS)
       
   Watermark Options:
@@ -162,6 +165,7 @@ Flags:
       
   Other Options:
       --dry-run                  Preview only, no API calls or writes
+      --no-progress              Disable progress bar (useful for CI/CD)
       --log-level string         Log level: info or debug (default: "info")
   -h, --help                     Help for fetch
 ```
@@ -229,6 +233,17 @@ lastfm-sync fetch \
   --azure-container scrobbles \
   --azure-account mystorageaccount \
   --azure-auth mi
+```
+
+**Using account key:**
+```bash
+lastfm-sync fetch \
+  --user alice \
+  --output azure \
+  --azure-container scrobbles \
+  --azure-account mystorageaccount \
+  --azure-account-key "your-account-key" \
+  --azure-auth key
 ```
 
 ### Advanced Usage
