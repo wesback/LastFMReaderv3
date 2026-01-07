@@ -194,3 +194,111 @@ func TestBackoffWithRetryAfter(t *testing.T) {
 		t.Errorf("Expected ~2s wait for Retry-After, got %v", elapsed)
 	}
 }
+
+// TestIsTransientTimeoutErrors tests that various timeout error formats are recognized as transient
+func TestIsTransientTimeoutErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		wantRetry bool
+	}{
+		{
+			name:      "context deadline exceeded - simple",
+			err:       fmt.Errorf("request failed: context deadline exceeded"),
+			wantRetry: true,
+		},
+		{
+			name:      "context deadline exceeded - with URL",
+			err:       fmt.Errorf("Get \"https://ws.audioscrobbler.com/2.0/?api_key=xxx\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"),
+			wantRetry: true,
+		},
+		{
+			name:      "timeout generic",
+			err:       fmt.Errorf("request timeout while connecting"),
+			wantRetry: true,
+		},
+		{
+			name:      "connection reset",
+			err:       fmt.Errorf("request failed: connection reset"),
+			wantRetry: true,
+		},
+		{
+			name:      "connection refused",
+			err:       fmt.Errorf("request failed: connection refused"),
+			wantRetry: true,
+		},
+		{
+			name:      "rate limited",
+			err:       fmt.Errorf("rate limited (429)"),
+			wantRetry: true,
+		},
+		{
+			name:      "server error 500",
+			err:       fmt.Errorf("server error (500)"),
+			wantRetry: true,
+		},
+		{
+			name:      "network unreachable",
+			err:       fmt.Errorf("dial tcp: network is unreachable"),
+			wantRetry: true,
+		},
+		{
+			name:      "no such host",
+			err:       fmt.Errorf("dial tcp: no such host"),
+			wantRetry: true,
+		},
+		{
+			name:      "non-transient error",
+			err:       fmt.Errorf("invalid API key"),
+			wantRetry: false,
+		},
+		{
+			name:      "nil error",
+			err:       nil,
+			wantRetry: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isTransient(tt.err)
+			if got != tt.wantRetry {
+				t.Errorf("isTransient(%v) = %v, want %v", tt.err, got, tt.wantRetry)
+			}
+		})
+	}
+}
+
+// TestDoWithRetryTimeoutError tests that timeout errors trigger retry with backoff
+func TestDoWithRetryTimeoutError(t *testing.T) {
+	limiter := NewLimiter(100, 3) // High QPS, 3 max retries
+
+	attempt := 0
+	startTime := time.Now()
+
+	err := limiter.DoWithRetry(context.Background(), func() error {
+		attempt++
+		if attempt <= 2 {
+			// Simulate the actual timeout error from Last.fm API
+			return fmt.Errorf("Get \"https://ws.audioscrobbler.com/2.0/?api_key=xxx\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)")
+		}
+		// Third attempt succeeds
+		return nil
+	})
+
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("DoWithRetry() unexpected error = %v", err)
+	}
+
+	if attempt != 3 {
+		t.Errorf("Expected 3 attempts, got %d", attempt)
+	}
+
+	// With exponential backoff: 1s + 2s = 3s total wait
+	// Allow some tolerance for execution time
+	if elapsed < 3*time.Second || elapsed > 4*time.Second {
+		t.Errorf("Expected ~3s total wait (1s + 2s backoff), got %v", elapsed)
+	}
+}

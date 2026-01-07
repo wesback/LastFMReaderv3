@@ -135,6 +135,165 @@ Required when `--output azure`:
 
 ---
 
+### Merge Command Flags
+
+The `merge` command consolidates multiple NDJSON scrobble files into a single deduplicated output.
+
+**Storage Backend:** When `--azure-container` is provided, both input and output use Azure Blob Storage. Otherwise, both use local filesystem.
+
+**Azure Auto-Discovery:** Files are automatically discovered following the standard structure: `lastfm/dt=*/{username}-*.ndjson`. Output defaults to `merged/{username}.json` (customizable with `--azure-prefix`).
+
+#### User Configuration
+
+| Flag | Short | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| `--user` | `-u` | string | **Yes** | Last.fm username (used for output filename and Azure auto-discovery). |
+
+#### Input/Output Configuration
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| **Input patterns** | args | - | *Conditional* | File patterns (e.g., `*.ndjson`). Required for local, optional for Azure (auto-discovers). |
+| `--out-path` | `-o` | string | `{username}.json` | Output file path. Local: relative/absolute path. Azure: blob name. |
+
+#### Azure Configuration (enables Azure for both input and output)
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--azure-container` | string | - | **Yes** | Azure container name. Enables Azure mode. |
+| `--azure-account` | string | `$AZURE_STORAGE_ACCOUNT` | No | Storage account name. |
+| `--azure-auth` | string | `default` | No | Auth method: `default`, `mi`, `connstr`, `key`, `sas`. |
+| `--azure-prefix` | string | `merged/` | No | Blob prefix for output. Input always uses `lastfm/dt=*/`. |
+| `--azure-container-url` | string | - | No | Full container URL (alternative to account+container). |
+| `--azure-account-key` | string | `$LASTFM_AZURE_ACCOUNT_KEY` | No | Account key (for `key` auth). |
+| `--azure-sas-token` | string | `$LASTFM_AZURE_SAS_TOKEN` | No | SAS token (for `sas` auth). |
+
+**Examples:**
+```bash
+# Local files
+lastfm-sync merge --user alice data/*.ndjson
+lastfm-sync merge --user alice --out-path ./archives/alice.json data/*.ndjson
+
+# Azure (auto-discover input, output to merged/alice.json)
+lastfm-sync merge --user alice --azure-container lastfmdata --azure-account myaccount
+
+# Azure with custom output prefix (archives/2026/alice.json)
+lastfm-sync merge --user alice \
+  --azure-container lastfmdata --azure-account myaccount \
+  --azure-prefix "archives/2026/"
+```
+
+| Flag | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `--azure-container` | string | - | **Yes** | Azure container name. |
+| `--azure-account` | string | `$AZURE_STORAGE_ACCOUNT` | No | Storage account name. |
+| `--azure-auth` | string | `default` | No | Auth method: `default`, `mi`, `connstr`, `key`, `sas`. |
+| `--azure-prefix` | string | `merged/` | No | Blob prefix path (prepended to output filename). |
+| `--azure-container-url` | string | - | No | Full container URL (alternative to account+container). |
+| `--azure-account-key` | string | `$LASTFM_AZURE_ACCOUNT_KEY` | No | Account key (for `key` auth). |
+| `--azure-sas-token` | string | `$LASTFM_AZURE_SAS_TOKEN` | No | SAS token (for `sas` auth). |
+
+**Output Examples:**
+```bash
+# Local: default outputs to alice.json in current directory
+lastfm-sync merge --user alice data/*.ndjson
+
+# Local: explicit path
+lastfm-sync merge --user alice --out-path /data/archives/alice.json data/*.ndjson
+
+# Azure: outputs to az://myaccount/scrobbles/merged/alice.json
+lastfm-sync merge --user alice --output azure \
+  --azure-container scrobbles \
+  --azure-account myaccount \
+  data/*.ndjson
+
+# Azure: custom prefix outputs to az://myaccount/scrobbles/2026/alice.json
+lastfm-sync merge --user alice --output azure \
+  --azure-container scrobbles \
+  --azure-account myaccount \
+  --azure-prefix "2026/" \
+  data/*.ndjson
+
+# Azure: explicit blob path
+lastfm-sync merge --user alice --output azure \
+  --azure-container scrobbles \
+  --azure-account myaccount \
+  --out-path "custom-merge.json" \
+  data/*.ndjson
+```
+
+**Azure Authentication Methods:**
+- `default`: DefaultAzureCredential (recommended for Azure VMs/AKS)
+- `mi`: Managed Identity
+- `connstr`: Connection string from `AZURE_STORAGE_CONNECTION_STRING`
+- `key`: Storage account key via `--azure-account-key`
+- `sas`: SAS token via `--azure-sas-token`
+
+#### Deduplication
+
+| Flag | Type | Default | Options | Description |
+|------|------|---------|---------|-------------|
+| `--strategy` | string | `default` | `default`, `strict`, `relaxed`, `mbid` | Deduplication strategy (see below). |
+| `--conflict-resolution` | string | `completeness` | `completeness`, `first`, `last` | How to resolve duplicate scrobbles. |
+
+**Strategy Options:**
+- `default`: Artist + Album + Track + Timestamp (standard precision)
+- `strict`: Default + Duration (higher precision, requires duration field)
+- `relaxed`: Artist + Track + Timestamp (ignores album differences)
+- `mbid`: MusicBrainz ID + Timestamp (uses MBID when available, falls back to default)
+
+**Conflict Resolution Modes:**
+- `completeness`: Keep scrobble with most complete metadata (default, recommended)
+- `first`: Always keep first occurrence
+- `last`: Always keep last occurrence
+
+**Examples:**
+```bash
+# Relaxed strategy (ignore album differences)
+lastfm-sync merge --user alice *.ndjson --strategy relaxed
+
+# Keep first occurrence of duplicates
+lastfm-sync merge --user alice *.ndjson --conflict-resolution first
+```
+
+#### Checkpointing (Resume Support)
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--checkpoint-interval` | int | `10000` | Save checkpoint every N scrobbles (0 = disable). |
+| `--checkpoint-path` | string | `.merge-checkpoint.json` | Checkpoint file path. |
+| `--resume` | bool | `false` | Resume from existing checkpoint file. |
+
+**Examples:**
+```bash
+# Large dataset with checkpointing
+lastfm-sync merge --user alice large-*.ndjson \
+  --checkpoint-interval 50000 \
+  --checkpoint-path ./checkpoints/merge.json
+
+# Resume after interruption
+lastfm-sync merge --user alice large-*.ndjson --resume
+```
+
+#### Display Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | bool | `false` | Preview merge statistics without writing output. |
+| `--verbose` | bool | `false` | Enable DEBUG-level logging (shows deduplication decisions). |
+| `--no-progress` | bool | `false` | Disable progress bar. |
+
+**Examples:**
+```bash
+# Preview merge results
+lastfm-sync merge --user alice *.ndjson --dry-run
+
+# Verbose logging for debugging
+lastfm-sync merge --user alice *.ndjson --verbose
+```
+
+---
+
 ## Configuration Precedence Examples
 
 ### Example 1: Environment Variable vs CLI Flag

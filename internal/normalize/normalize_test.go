@@ -14,17 +14,17 @@ func TestNormalizeTitle(t *testing.T) {
 	}{
 		// Remaster patterns
 		{"remaster simple", "Bohemian Rhapsody - Remastered 2011", "Bohemian Rhapsody"},
-		{"remaster parens", "Stairway to Heaven (Remaster)", "Stairway to Heaven"},
+		{"remaster parens", "Stairway to Heaven (Remaster)", "Stairway To Heaven"},
 		{"remaster year", "Hotel California - 2013 Remaster", "Hotel California"},
 		{"reissue", "Yesterday - Reissue", "Yesterday"},
-		{"remasterise french", "La Vie en Rose - Remasterisé", "La Vie en Rose"},
+		{"remasterise french", "La Vie en Rose - Remasterisé", "La Vie En Rose"},
 
 		// Live patterns
 		{"live simple", "Hotel California - Live", "Hotel California"},
 		{"live at venue", "Comfortably Numb - Live at Pompeii", "Comfortably Numb"},
 		{"live year", "Dream On - Live 2023", "Dream On"},
 		{"en vivo spanish", "Bésame Mucho - En Vivo", "Bésame Mucho"},
-		{"ao vivo portuguese", "Garota de Ipanema - Ao Vivo", "Garota de Ipanema"},
+		{"ao vivo portuguese", "Garota de Ipanema - Ao Vivo", "Garota De Ipanema"},
 		{"en direct french", "Non, Je Ne Regrette Rien - En Direct", "Non, Je Ne Regrette Rien"},
 
 		// Version patterns
@@ -32,30 +32,50 @@ func TestNormalizeTitle(t *testing.T) {
 		{"radio edit", "Smells Like Teen Spirit - Radio Edit", "Smells Like Teen Spirit"},
 		{"extended mix", "Blue Monday - Extended Mix", "Blue Monday"},
 		{"explicit version", "Lose Yourself - Explicit Version", "Lose Yourself"},
+		{"standalone version dash", "Song - Version", "Song"},
+		{"named version in parens", "The Skye Boat Song (Castle Leoch Version)", "The Skye Boat Song (Castle Leoch Version)"},
+		{"7 inch edit", "Rhythm Is A Dancer - 7\" Edit", "Rhythm Is A Dancer"},
+		{"12 inch mix", "Blue Monday - 12\" Mix", "Blue Monday"},
+		{"7 inch version", "Song - 7 inch Version", "Song"},
+
+		// Source patterns
+		{"from film", "It Must Have Been Love - From the Film \"Pretty Woman\"", "It Must Have Been Love"},
+		{"from movie", "My Heart Will Go On - From the Movie Titanic", "My Heart Will Go On"},
+		{"from soundtrack", "The Hanging Tree - From The Soundtrack", "The Hanging Tree"},
+		{"from soundtrack with title", "Hungry Eyes - From \"Dirty Dancing\" Soundtrack", "Hungry Eyes"},
+		{"from musical", "Seasons of Love - From the Musical Rent", "Seasons Of Love"},
+		{"from album parens", "Eye of the Tiger (From the Album \"Rocky III\")", "Eye Of The Tiger"},
 
 		// Date patterns
 		{"year simple", "Wonderwall - 2011", "Wonderwall"},
 		{"year parens", "Hallelujah (2008)", "Hallelujah"},
 		{"year remaster", "Let It Be - 2009 Remaster", "Let It Be"},
+		{"year with event", "Ne partez pas sans moi (Grand prix de L'Eurovision 1988)", "Ne Partez Pas Sans Moi"},
+		{"year with bracket text", "Song [Recorded 2023]", "Song"},
 
 		// Remix patterns
 		{"remix artist", "Vogue - Shep Pettibone Remix", "Vogue"},
-		{"club mix", "Rhythm Is a Dancer - Club Mix", "Rhythm Is a Dancer"},
+		{"club mix", "Rhythm Is a Dancer - Club Mix", "Rhythm Is A Dancer"},
 		{"acoustic", "Layla - Acoustic", "Layla"},
-		{"unplugged", "About a Girl - Unplugged", "About a Girl"},
+		{"unplugged", "About a Girl - Unplugged", "About A Girl"},
 		{"instrumental", "Europa - Instrumental", "Europa"},
 
 		// Featuring patterns
-		{"feat dot", "Love the Way You Lie (feat. Rihanna)", "Love the Way You Lie"},
-		{"ft abbreviation", "Empire State of Mind - ft. Alicia Keys", "Empire State of Mind"},
+		{"feat dot", "Love the Way You Lie (feat. Rihanna)", "Love The Way You Lie"},
+		{"ft abbreviation", "Empire State of Mind - ft. Alicia Keys", "Empire State Of Mind"},
 		{"featuring full", "Walk This Way - Featuring Run-D.M.C.", "Walk This Way"},
 		{"with", "Under Pressure - With David Bowie", "Under Pressure"},
 
 		// No changes needed
 		{"already clean", "Bohemian Rhapsody", "Bohemian Rhapsody"},
-		{"no annotations", "Stairway to Heaven", "Stairway to Heaven"},
+		{"no annotations", "Stairway to Heaven", "Stairway To Heaven"},
 		{"cut in title", "God's Gonna Cut You Down", "God's Gonna Cut You Down"},
 		{"break in title", "Break On Through", "Break On Through"},
+		{"with in title", "Running Up That Hill (A Deal with God)", "Running Up That Hill (A Deal With God)"},
+		{"with in title parens", "The Man Who Sold the World (with or Without You)", "The Man Who Sold The World (with Or Without You)"},
+		{"with me in title", "Why Don´t You Dance With Me?", "Why Don´t You Dance With Me?"},
+		{"year in title", "Nostalgic Footage of 1970's New York", "Nostalgic Footage Of 1970's New York"},
+		{"year possessive", "Summer of '69", "Summer Of '69"},
 	}
 
 	for _, tt := range tests {
@@ -90,6 +110,7 @@ func TestNormalizeTitle_EdgeCases(t *testing.T) {
 		{"multiple remove", "Song - Live (2011 Remaster)", "Song"},
 		{"all patterns", "Track - Live at Venue (2023 Remaster) [feat. Artist]", "Track"},
 		{"complex", "Title - Remastered 2011 - Live - Radio Edit", "Title"},
+		{"named version with feat", "The Skye Boat Song (Castle Leoch Version) [feat. Raya Yarbrough]", "The Skye Boat Song (Castle Leoch Version)"},
 
 		// Unicode and international
 		{"emoji", "Happy 😊 - Remastered", "Happy 😊"},
@@ -144,6 +165,33 @@ func TestNormalizeTitle_International(t *testing.T) {
 			result := NormalizeTitle(tt.input)
 			if result != tt.expected {
 				t.Errorf("NormalizeTitle(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestToTitleCase tests title case conversion.
+func TestToTitleCase(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"lowercase", "vamos a la playa", "Vamos A La Playa"},
+		{"uppercase", "BOHEMIAN RHAPSODY", "BOHEMIAN RHAPSODY"},
+		{"mixed case", "Hotel california", "Hotel California"},
+		{"already title", "Stairway To Heaven", "Stairway To Heaven"},
+		{"single word", "yesterday", "Yesterday"},
+		{"empty", "", ""},
+		{"with punctuation", "don't stop believin'", "Don't Stop Believin'"},
+		{"preserve McX", "back in the u.s.s.r.", "Back In The U.s.s.r."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ToTitleCase(tt.input)
+			if result != tt.expected {
+				t.Errorf("ToTitleCase(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}

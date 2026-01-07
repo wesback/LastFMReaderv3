@@ -958,6 +958,155 @@ curl -w "Time: %{time_total}s\n" "https://ws.audioscrobbler.com/2.0/?method=user
 
 ## Data & Storage Issues
 
+### Merge Command Issues
+
+#### Error: `no input files specified`
+
+**Symptom:**
+```
+Error: no input files specified
+Action: Provide at least one input file path or glob pattern
+```
+
+**Cause:** No input files provided to merge command.
+
+**Solution:**
+```bash
+# Provide username and explicit file paths
+lastfm-sync merge --user alice file1.ndjson file2.ndjson
+
+# Or use glob patterns
+lastfm-sync merge --user alice exports/*.ndjson
+
+# Check files exist
+ls -lh exports/*.ndjson
+```
+
+---
+
+#### Error: `failed to discover files matching pattern`
+
+**Symptom:**
+```
+Error: failed to discover files matching pattern "*.ndjson"
+Action: Check path exists and pattern is correct. Use quotes around patterns.
+```
+
+**Cause:** Glob pattern doesn't match any files or shell expanded pattern before command saw it.
+
+**Solution:**
+```bash
+# Quote patterns to prevent shell expansion
+lastfm-sync merge --user alice "exports/*.ndjson"
+
+# Check what files exist
+ls exports/*.ndjson
+
+# Use absolute paths if relative paths fail
+lastfm-sync merge --user alice "$PWD/exports/*.ndjson"
+```
+
+---
+
+#### Error: `invalid deduplication strategy`
+
+**Symptom:**
+```
+Error: Invalid deduplication strategy 'strct'
+Valid options: default, strict, relaxed, mbid
+Action: Use --strategy flag with one of the valid options
+```
+
+**Cause:** Typo or invalid strategy name.
+
+**Solution:**
+```bash
+# Valid strategies
+lastfm-sync merge --user alice *.ndjson --strategy default  # Artist+Album+Track+Timestamp
+lastfm-sync merge --user alice *.ndjson --strategy strict   # + Duration
+lastfm-sync merge --user alice *.ndjson --strategy relaxed  # No Album
+lastfm-sync merge --user alice *.ndjson --strategy mbid     # MusicBrainz ID
+
+# Check help for options
+lastfm-sync merge --help
+```
+
+---
+
+#### Checkpoint resume fails with config mismatch
+
+**Symptom:**
+```
+WARN: Checkpoint config mismatch, starting fresh
+```
+
+**Cause:** Checkpoint was created with different strategy or conflict resolution settings.
+
+**Solution:**
+```bash
+# Delete old checkpoint and start fresh
+rm .merge-checkpoint.json
+lastfm-sync merge --user alice *.ndjson
+
+# Or use same settings as original run
+lastfm-sync merge --user alice *.ndjson \
+  --strategy strict \
+  --conflict-resolution first \
+  --resume
+```
+
+---
+
+#### Large merge runs out of memory
+
+**Symptom:**
+```
+panic: runtime: out of memory
+fatal error: runtime: out of memory
+```
+
+**Cause:** Merging millions of scrobbles exceeds available RAM (~3GB per 1M scrobbles).
+
+**Solution:**
+```bash
+# Enable checkpointing to save progress
+lastfm-sync merge --user alice huge-dataset-*.ndjson \
+  --checkpoint-interval 100000 \
+  --checkpoint-path ./merge-checkpoint.json
+
+# Split into smaller batches
+lastfm-sync merge --user alice batch-1-*.ndjson --out-path ./temp/alice-batch1.json
+lastfm-sync merge --user alice batch-2-*.ndjson --out-path ./temp/alice-batch2.json
+lastfm-sync merge --user alice ./temp/alice-batch1.json ./temp/alice-batch2.json -o alice.json
+
+# Or process on a machine with more RAM
+# Tested with 1M scrobbles using ~2.9GB RAM
+```
+
+---
+
+#### Duplicate detection not working as expected
+
+**Symptom:** Merge keeps scrobbles you consider duplicates.
+
+**Cause:** Wrong deduplication strategy for your use case.
+
+**Solution:**
+```bash
+# Try relaxed strategy (ignores album differences)
+lastfm-sync merge --user alice *.ndjson --strategy relaxed
+
+# Preview with dry-run to check results
+lastfm-sync merge --user alice *.ndjson --strategy relaxed --dry-run
+
+# Use verbose mode to see deduplication decisions
+lastfm-sync merge --user alice *.ndjson --strategy relaxed --verbose 2>&1 | grep "duplicate"
+```
+
+---
+
+### Watermark and State Issues
+
 ### Error: `failed to create watermark file`
 
 **Symptom:**

@@ -1,13 +1,15 @@
 package writer
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lastfm-reader/lastfm-sync/internal/models"
 	"io"
 	"os"
 	"time"
+
+	"github.com/lastfm-reader/lastfm-sync/internal/models"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -20,6 +22,7 @@ type AzureWriter struct {
 	prefix    string
 	username  string
 	tempFile  *os.File
+	writer    *bufio.Writer
 	tempPath  string
 	closed    bool
 }
@@ -39,6 +42,7 @@ func NewAzureWriter(client *azblob.Client, container, prefix, username string) (
 		prefix:    prefix,
 		username:  username,
 		tempFile:  tempFile,
+		writer:    bufio.NewWriter(tempFile),
 		tempPath:  tempFile.Name(),
 		closed:    false,
 	}, nil
@@ -49,7 +53,7 @@ func (w *AzureWriter) SetUsername(username string) {
 	w.username = username
 }
 
-// WriteBatch writes a batch of scrobbles to the temp file
+// WriteBatch writes a batch of scrobbles to the buffered temp file
 func (w *AzureWriter) WriteBatch(ctx context.Context, scrobbles []models.Scrobble) error {
 	if w.closed {
 		return fmt.Errorf("writer is closed")
@@ -61,10 +65,11 @@ func (w *AzureWriter) WriteBatch(ctx context.Context, scrobbles []models.Scrobbl
 			return fmt.Errorf("marshal scrobble: %w", err)
 		}
 
-		if _, err := w.tempFile.Write(data); err != nil {
-			return fmt.Errorf("write to temp file: %w", err)
+		// Write to buffer (not directly to file) to prevent mid-line splits
+		if _, err := w.writer.Write(data); err != nil {
+			return fmt.Errorf("write to buffer: %w", err)
 		}
-		if _, err := w.tempFile.Write([]byte("\n")); err != nil {
+		if err := w.writer.WriteByte('\n'); err != nil {
 			return fmt.Errorf("write newline: %w", err)
 		}
 	}
@@ -76,6 +81,11 @@ func (w *AzureWriter) WriteBatch(ctx context.Context, scrobbles []models.Scrobbl
 func (w *AzureWriter) Flush(ctx context.Context) error {
 	if w.closed {
 		return fmt.Errorf("writer is closed")
+	}
+
+	// Flush buffer to file first
+	if err := w.writer.Flush(); err != nil {
+		return fmt.Errorf("flush buffer: %w", err)
 	}
 
 	// Sync temp file to disk
@@ -112,6 +122,19 @@ func (w *AzureWriter) Flush(ctx context.Context) error {
 		return fmt.Errorf("upload to azure blob %s: %w", blobPath, err)
 	}
 
+	// Truncate temp file for next batch (prevents appending to uploaded data)
+	if err := w.tempFile.Truncate(0); err != nil {
+		return fmt.Errorf("truncate temp file: %w", err)
+	}
+
+	// Reset file pointer to beginning
+	if _, err := w.tempFile.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("reset file pointer: %w", err)
+	}
+
+	// Reset the buffer writer to point to the clean file
+	w.writer.Reset(w.tempFile)
+
 	return nil
 }
 
@@ -122,6 +145,11 @@ func (w *AzureWriter) Close(ctx context.Context) error {
 	}
 
 	w.closed = true
+
+	// Flush any remaining buffered data before closing
+	if err := w.writer.Flush(); err != nil {
+		return fmt.Errorf("final flush: %w", err)
+	}
 
 	// Close temp file
 	if err := w.tempFile.Close(); err != nil {
