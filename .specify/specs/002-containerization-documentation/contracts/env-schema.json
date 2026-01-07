@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/lastfm-reader/lastfm-sync/schemas/env-schema.json",
+  "title": "LastFM Sync Environment Variables Schema",
+  "description": "JSON Schema for validating lastfm-sync environment variables",
+  "type": "object",
+  "properties": {
+    "LASTFM_API_KEY": {
+      "type": "string",
+      "description": "Last.fm API authentication key (required)",
+      "minLength": 1,
+      "pattern": "^[a-f0-9]{32}$",
+      "sensitive": true,
+      "examples": ["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"]
+    },
+    "LASTFM_USER": {
+      "type": "string",
+      "description": "Last.fm username to fetch scrobbles for (required)",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "examples": ["alice", "music_lover_2024"]
+    },
+    "LASTFM_QPS": {
+      "type": "integer",
+      "description": "Rate limit in queries per second (optional, default: 3)",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3,
+      "examples": [3, 5]
+    },
+    "LASTFM_TIMEOUT": {
+      "type": "string",
+      "description": "API request timeout as Go duration string (optional, default: 10s)",
+      "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
+      "default": "10s",
+      "examples": ["10s", "30s", "1m"]
+    },
+    "LASTFM_LOG": {
+      "type": "string",
+      "description": "Log level (optional, default: info)",
+      "enum": ["debug", "info", "warn", "error"],
+      "default": "info",
+      "examples": ["info", "debug"]
+    },
+    "LASTFM_STATE": {
+      "type": "string",
+      "description": "State directory for watermarks (optional, default: ~/.lastfm-sync)",
+      "minLength": 1,
+      "default": "~/.lastfm-sync",
+      "examples": ["~/.lastfm-sync", "/data", "/var/lib/lastfm-sync"]
+    },
+    "AZURE_STORAGE_ACCOUNT": {
+      "type": "string",
+      "description": "Azure Storage account name (required when --output azure)",
+      "minLength": 3,
+      "maxLength": 24,
+      "pattern": "^[a-z0-9]+$",
+      "examples": ["mystorageaccount", "lastfmdata"]
+    },
+    "AZURE_STORAGE_CONTAINER": {
+      "type": "string",
+      "description": "Azure Blob container name (required when --output azure)",
+      "minLength": 3,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][-a-z0-9]*$",
+      "examples": ["scrobbles", "lastfm-data"]
+    },
+    "AZURE_STORAGE_CONNECTION_STRING": {
+      "type": "string",
+      "description": "Azure Storage connection string (alternative auth method)",
+      "minLength": 1,
+      "pattern": "^DefaultEndpointsProtocol=https;.*",
+      "sensitive": true,
+      "examples": ["DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=..."]
+    },
+    "AZURE_STORAGE_SAS_TOKEN": {
+      "type": "string",
+      "description": "Azure Storage SAS token (alternative auth method)",
+      "minLength": 1,
+      "pattern": "^\\?sv=.*",
+      "sensitive": true,
+      "examples": ["?sv=2021-06-08&ss=b&srt=sco&sp=rwdlac&se=2026-12-31T23:59:59Z&..."]
+    }
+  },
+  "required": ["LASTFM_API_KEY", "LASTFM_USER"],
+  "additionalProperties": true,
+  "examples": [
+    {
+      "LASTFM_API_KEY": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+      "LASTFM_USER": "alice",
+      "LASTFM_QPS": 3,
+      "LASTFM_TIMEOUT": "10s",
+      "LASTFM_LOG": "info",
+      "LASTFM_STATE": "~/.lastfm-sync"
+    },
+    {
+      "LASTFM_API_KEY": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+      "LASTFM_USER": "bob",
+      "LASTFM_LOG": "debug",
+      "AZURE_STORAGE_ACCOUNT": "mystorageaccount",
+      "AZURE_STORAGE_CONTAINER": "scrobbles",
+      "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=mystorageaccount;AccountKey=..."
+    }
+  ]
+}

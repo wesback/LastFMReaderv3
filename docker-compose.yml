@@ -1,0 +1,145 @@
+# ============================================================================
+# Docker Compose Configuration for LastFMReaderv3
+# ============================================================================
+# This file defines the development environment for running lastfm-sync
+# locally with Docker Compose.
+#
+# Quick Start:
+#   1. Copy .env.example to .env and add your LASTFM_API_KEY
+#   2. Run: docker compose up
+#   3. Output will be in ./data/ directory
+#
+# See docs/docker.md for complete documentation.
+# ============================================================================
+
+services:
+  # LastFM Sync Service
+  # Fetches scrobbles and writes to local volume
+  lastfm-sync:
+    # Build configuration
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # Image name (if pulling from registry instead of building)
+    # image: lastfm-sync:latest
+    
+    # Container name
+    container_name: lastfm-sync
+    
+    # Load environment variables from .env file
+    # Required: LASTFM_API_KEY
+    # Optional: LASTFM_QPS, LASTFM_TIMEOUT, LASTFM_LOG_LEVEL, etc.
+    env_file:
+      - .env
+    
+    # Additional environment variables (can override .env values)
+    environment:
+      # Output mode: local or azure (default: local from .env or here)
+      - LASTFM_OUTPUT=${LASTFM_OUTPUT:-local}
+      
+      # State directory inside container (matches VOLUME in Dockerfile)
+      - LASTFM_STATE=/data/state
+    
+    # Volume mounts: persist data outside container
+    volumes:
+      # Map host ./data directory to container /data
+      # Scrobbles: /data/{user}.ndjson
+      # Watermarks: /data/state/{user}.watermark
+      - ./data:/data
+    
+    # Command to run (override CMD from Dockerfile)
+    # Uses LASTFM_USER from .env file, defaults to "alice" if not set
+    # Customize: Change --user, add --since, --log-level, etc.
+    command: >
+      fetch
+      --user ${LASTFM_USER:-alice}
+      --output local
+      --out-path /data/${LASTFM_USER:-alice}.ndjson
+    
+    # Restart policy: no (one-shot command)
+    # Change to "unless-stopped" for continuous syncing (requires scheduling in command)
+    restart: "no"
+    
+    # Resource limits (optional, uncomment to enable)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 256M
+    #     reservations:
+    #       cpus: '0.25'
+    #       memory: 128M
+    
+    # Healthcheck (disabled - CLI tool doesn't need health checks)
+    # healthcheck:
+    #   disable: true
+
+# ============================================================================
+# Volume Definitions (optional, for named volumes)
+# ============================================================================
+# Uncomment to use named volumes instead of host bind mounts
+# volumes:
+#   lastfm-data:
+#     driver: local
+
+# ============================================================================
+# Network Definitions (optional)
+# ============================================================================
+# Default network is sufficient for single-service setup
+# networks:
+#   lastfm-net:
+#     driver: bridge
+
+# ============================================================================
+# Usage Examples
+# ============================================================================
+# 
+# Basic usage:
+#   docker compose up
+# 
+# Run in background:
+#   docker compose up -d
+# 
+# View logs:
+#   docker compose logs -f
+# 
+# Stop container:
+#   docker compose down
+# 
+# Rebuild and start:
+#   docker compose up --build
+# 
+# Run with different user (override .env):
+#   LASTFM_USER=bob docker compose up
+# 
+# Run different command:
+#   docker compose run --rm lastfm-sync fetch --user charlie --log-level debug
+# 
+# Run dry-run:
+#   docker compose run --rm lastfm-sync fetch --user alice --dry-run
+# 
+# Clean up volumes:
+#   docker compose down -v
+# 
+# ============================================================================
+# Advanced Configurations
+# ============================================================================
+# 
+# For Azure Blob Storage output:
+#   1. Set in .env:
+#      LASTFM_OUTPUT=azure
+#      AZURE_STORAGE_ACCOUNT=mystorageaccount
+#   2. Update command:
+#      command: >
+#        fetch
+#        --user ${LASTFM_USER:-alice}
+#        --output azure
+#        --azure-container scrobbles
+#        --azure-auth default
+# 
+# For scheduled syncs (cron-like):
+#   - Use a scheduler container (e.g., ofelia) or
+#   - Run docker compose up periodically via host cron
+# 
+# ============================================================================

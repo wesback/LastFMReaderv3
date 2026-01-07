@@ -1,0 +1,13 @@
+{
+  "resourceGroup": "lastfm-rg",
+  "location": "eastus",
+  "containerNamePrefix": "lastfm-sync",
+  "containerImage": "ghcr.io/lastfm-reader/lastfm-sync:latest",
+  "storageAccount": "your-storage-account-name",
+  "storageContainer": "scrobbles",
+  "keyVaultName": "your-keyvault-name",
+  "managedIdentity": "/subscriptions/{subscription-id}/resourceGroups/{rg-name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identity-name}",
+  "logAnalyticsWorkspace": "lastfm-logs",
+  "cpu": 0.5,
+  "memory": 0.5
+}

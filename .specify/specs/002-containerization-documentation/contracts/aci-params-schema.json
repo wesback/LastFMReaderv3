@@ -1,0 +1,243 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/lastfm-reader/lastfm-sync/schemas/aci-params-schema.json",
+  "title": "Azure Container Instances Deployment Parameters Schema",
+  "description": "JSON Schema for validating Azure Container Instances deployment parameters",
+  "type": "object",
+  "properties": {
+    "resourceGroup": {
+      "type": "string",
+      "description": "Azure resource group name",
+      "minLength": 1,
+      "maxLength": 90,
+      "pattern": "^[a-zA-Z0-9._()-]+$",
+      "examples": ["lastfm-sync-rg", "production-lastfm"]
+    },
+    "location": {
+      "type": "string",
+      "description": "Azure region for deployment",
+      "enum": [
+        "eastus",
+        "eastus2",
+        "westus",
+        "westus2",
+        "westus3",
+        "centralus",
+        "northcentralus",
+        "southcentralus",
+        "westcentralus",
+        "northeurope",
+        "westeurope",
+        "uksouth",
+        "ukwest",
+        "francecentral",
+        "germanywestcentral",
+        "switzerlandnorth",
+        "norwayeast",
+        "swedencentral",
+        "australiaeast",
+        "australiasoutheast",
+        "japaneast",
+        "japanwest",
+        "koreacentral",
+        "southeastasia",
+        "eastasia",
+        "southindia",
+        "centralindia",
+        "canadacentral",
+        "canadaeast",
+        "brazilsouth",
+        "southafricanorth"
+      ],
+      "examples": ["eastus", "westus2", "westeurope"]
+    },
+    "containerName": {
+      "type": "string",
+      "description": "Container instance name (must be unique within resource group)",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][-a-z0-9]*$",
+      "examples": ["lastfm-sync", "lastfm-sync-alice"]
+    },
+    "image": {
+      "type": "string",
+      "description": "Container image reference (Docker Hub or Azure Container Registry)",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9._/-]+(:[a-zA-Z0-9._-]+)?$",
+      "examples": [
+        "lastfmreader/lastfm-sync:latest",
+        "myregistry.azurecr.io/lastfm-sync:v1.0.0"
+      ]
+    },
+    "cpu": {
+      "type": "number",
+      "description": "CPU cores (valid values: 0.5, 1, 2, 4)",
+      "enum": [0.5, 1, 2, 4],
+      "examples": [0.5, 1]
+    },
+    "memoryInGb": {
+      "type": "number",
+      "description": "Memory allocation in GB (must be compatible with CPU tier)",
+      "minimum": 0.5,
+      "maximum": 16.0,
+      "examples": [1.0, 1.5, 2.0]
+    },
+    "restartPolicy": {
+      "type": "string",
+      "description": "Container restart policy",
+      "enum": ["Always", "OnFailure", "Never"],
+      "default": "OnFailure",
+      "examples": ["OnFailure"]
+    },
+    "environmentVariables": {
+      "type": "object",
+      "description": "Non-sensitive environment variables (visible in Azure Portal)",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "examples": [
+        {
+          "LASTFM_USER": "alice",
+          "LASTFM_QPS": "3",
+          "LASTFM_LOG": "info"
+        }
+      ]
+    },
+    "secureEnvironmentVariables": {
+      "type": "object",
+      "description": "Sensitive environment variables (hidden in Azure Portal, support Key Vault references)",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "examples": [
+        {
+          "LASTFM_API_KEY": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+        },
+        {
+          "LASTFM_API_KEY": "@keyvault(lastfm-api-key)"
+        }
+      ]
+    },
+    "logAnalytics": {
+      "type": "object",
+      "description": "Log Analytics workspace configuration for centralized logging",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "description": "Log Analytics workspace ID (GUID)",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "examples": ["12345678-1234-1234-1234-123456789012"]
+        },
+        "workspaceKey": {
+          "type": "string",
+          "description": "Log Analytics workspace key (base64-encoded)",
+          "minLength": 1,
+          "sensitive": true,
+          "examples": ["ABC123def456GHI789jkl012MNO345pqr678STU901vwx234YZA567bcd890=="]
+        }
+      },
+      "required": ["workspaceId", "workspaceKey"],
+      "additionalProperties": false
+    },
+    "registry": {
+      "type": "object",
+      "description": "Container registry authentication (if using private registry)",
+      "properties": {
+        "server": {
+          "type": "string",
+          "description": "Container registry server URL",
+          "pattern": "^[a-zA-Z0-9.-]+\\.[a-z]{2,}$",
+          "examples": ["myregistry.azurecr.io", "docker.io"]
+        },
+        "username": {
+          "type": "string",
+          "description": "Registry username",
+          "minLength": 1,
+          "examples": ["myregistry"]
+        },
+        "password": {
+          "type": "string",
+          "description": "Registry password or access token",
+          "minLength": 1,
+          "sensitive": true,
+          "examples": ["************"]
+        }
+      },
+      "required": ["server", "username", "password"],
+      "additionalProperties": false
+    },
+    "vnetConfiguration": {
+      "type": "object",
+      "description": "Virtual Network configuration (optional, for secure deployments)",
+      "properties": {
+        "vnetResourceGroup": {
+          "type": "string",
+          "description": "Resource group containing the VNet",
+          "minLength": 1
+        },
+        "vnetName": {
+          "type": "string",
+          "description": "Virtual Network name",
+          "minLength": 1
+        },
+        "subnetName": {
+          "type": "string",
+          "description": "Subnet name for container instance",
+          "minLength": 1
+        }
+      },
+      "required": ["vnetResourceGroup", "vnetName", "subnetName"],
+      "additionalProperties": false
+    },
+    "tags": {
+      "type": "object",
+      "description": "Azure resource tags for organization and cost tracking",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "examples": [
+        {
+          "environment": "production",
+          "application": "lastfm-sync",
+          "owner": "data-team"
+        }
+      ]
+    }
+  },
+  "required": [
+    "resourceGroup",
+    "location",
+    "containerName",
+    "image",
+    "cpu",
+    "memoryInGb"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "resourceGroup": "lastfm-sync-rg",
+      "location": "eastus",
+      "containerName": "lastfm-sync-alice",
+      "image": "myregistry.azurecr.io/lastfm-sync:latest",
+      "cpu": 0.5,
+      "memoryInGb": 1.0,
+      "restartPolicy": "OnFailure",
+      "environmentVariables": {
+        "LASTFM_USER": "alice",
+        "LASTFM_QPS": "3",
+        "LASTFM_LOG": "info"
+      },
+      "secureEnvironmentVariables": {
+        "LASTFM_API_KEY": "@keyvault(lastfm-api-key)"
+      },
+      "logAnalytics": {
+        "workspaceId": "12345678-1234-1234-1234-123456789012",
+        "workspaceKey": "ABC123def456GHI789jkl012MNO345pqr678STU901vwx234YZA567bcd890=="
+      },
+      "tags": {
+        "environment": "production",
+        "application": "lastfm-sync"
+      }
+    }
+  ]
+}

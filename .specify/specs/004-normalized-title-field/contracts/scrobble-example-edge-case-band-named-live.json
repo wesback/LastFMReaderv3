@@ -1,0 +1,26 @@
+{
+  "username": "edge_case_tester",
+  "artist": "Live",
+  "track": "Live",
+  "normalized_title": "Live",
+  "album": "Throwing Copper",
+  "uts": 1704564000,
+  "local_time": "2025-01-06T16:30:00Z",
+  "mbid": null,
+  "source": "lastfm",
+  "ingested_at": "2025-01-07T10:10:00Z",
+  "raw": {
+    "artist": {
+      "mbid": "live-band-mbid",
+      "#text": "Live"
+    },
+    "name": "Live",
+    "album": {
+      "mbid": "",
+      "#text": "Throwing Copper"
+    },
+    "date": {
+      "uts": "1704564000"
+    }
+  }
+}

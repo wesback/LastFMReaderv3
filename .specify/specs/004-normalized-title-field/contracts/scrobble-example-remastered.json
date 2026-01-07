@@ -1,0 +1,26 @@
+{
+  "username": "music_lover",
+  "artist": "Queen",
+  "track": "Bohemian Rhapsody - Remastered 2011",
+  "normalized_title": "Bohemian Rhapsody",
+  "album": "A Night at the Opera",
+  "uts": 1704556800,
+  "local_time": "2025-01-06T14:30:00Z",
+  "mbid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "source": "lastfm",
+  "ingested_at": "2025-01-07T10:00:00Z",
+  "raw": {
+    "artist": {
+      "mbid": "",
+      "#text": "Queen"
+    },
+    "name": "Bohemian Rhapsody - Remastered 2011",
+    "album": {
+      "mbid": "",
+      "#text": "A Night at the Opera"
+    },
+    "date": {
+      "uts": "1704556800"
+    }
+  }
+}

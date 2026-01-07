@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/lastfm-reader/lastfm-sync/normalize-config.schema.json",
+  "title": "Normalization Configuration",
+  "description": "Configuration schema for track title normalization feature",
+  "type": "object",
+  "properties": {
+    "normalize": {
+      "type": "object",
+      "description": "Title normalization configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable or disable title normalization globally",
+          "default": true
+        },
+        "min_length": {
+          "type": "integer",
+          "description": "Minimum length of normalized output. If result is shorter, original is returned.",
+          "default": 2,
+          "minimum": 1
+        },
+        "international": {
+          "type": "boolean",
+          "description": "Enable extended patterns for non-English annotations (En Vivo, Remasterisé, etc.)",
+          "default": true
+        },
+        "custom_patterns": {
+          "type": "array",
+          "description": "User-defined normalization patterns",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Unique identifier for the pattern",
+                "minLength": 1,
+                "pattern": "^[a-z_][a-z0-9_]*$",
+                "examples": ["deluxe_edition", "acoustic_version"]
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Valid Go regex pattern to match and remove",
+                "minLength": 1,
+                "examples": [
+                  "(?i)\\s*[-–—([]?\\s*deluxe\\s*(edition)?.*?[)\\]]?$",
+                  "(?i)\\s*[-–—([]?\\s*acoustic.*?[)\\]]?$"
+                ]
+              },
+              "priority": {
+                "type": "integer",
+                "description": "Application order (lower = earlier). Built-in patterns use 10-50.",
+                "default": 100,
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "description": {
+                "type": "string",
+                "description": "Human-readable explanation of what this pattern matches",
+                "examples": ["Removes 'Deluxe Edition' suffixes"]
+              }
+            },
+            "required": ["name", "pattern"],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "disabled_patterns": {
+          "type": "array",
+          "description": "List of built-in pattern names to disable",
+          "items": {
+            "type": "string",
+            "enum": ["remaster", "live", "version", "date", "remix"]
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["normalize"],
+  "additionalProperties": true,
+  "examples": [
+    {
+      "normalize": {
+        "enabled": true,
+        "min_length": 2,
+        "international": true,
+        "custom_patterns": [
+          {
+            "name": "deluxe_edition",
+            "pattern": "(?i)\\s*[-–—([]?\\s*deluxe\\s*(edition|version)?.*?[)\\]]?$",
+            "priority": 55,
+            "description": "Removes 'Deluxe Edition' suffixes"
+          },
+          {
+            "name": "acoustic",
+            "pattern": "(?i)\\s*[-–—([]?\\s*acoustic.*?[)\\]]?$",
+            "priority": 60,
+            "description": "Removes 'Acoustic' annotations"
+          }
+        ],
+        "disabled_patterns": ["remix"]
+      }
+    },
+    {
+      "normalize": {
+        "enabled": false
+      }
+    }
+  ]
+}

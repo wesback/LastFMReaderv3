@@ -1,0 +1,179 @@
+# lastfm-sync: Last.fm Scrobble Sync CLI
+
+![Test Status](https://github.com/lastfm-reader/lastfm-sync/actions/workflows/test.yml/badge.svg)
+
+**lastfm-sync** is a stateless CLI tool for exporting Last.fm scrobble history with incremental sync capabilities. It supports local NDJSON output and Azure Blob Storage with crash-safe resumption and rate limit compliance.
+
+## Feature Status
+
+### Phase 1: Foundation ✅ COMPLETED
+- Project scaffolding (Go 1.22, cobra CLI framework)
+- Core data models (Scrobble, Watermark, Config)
+- Structured logging with secret redaction (zap)
+- CI/CD pipeline (GitHub Actions)
+- Docker multi-stage build (distroless runtime)
+
+### Phase 2: Core Sync (In Progress)
+- [ ] Last.fm API client with pagination
+- [ ] Rate limiter (3 QPS) + exponential backoff
+- [ ] `fetch` command implementation
+- [ ] Local NDJSON writer with atomic watermark
+
+### Phase 3: Azure Integration
+- [ ] Azure Blob Storage writer (time-partitioned)
+- [ ] Azure watermark store
+- [ ] Azure authentication (DefaultAzureCredential, SAS, connection string)
+
+### Phase 4: Polish
+- [ ] Dry-run mode
+- [ ] Integration tests + Azurite support
+- [ ] Documentation & examples
+
+## Quick Start
+
+### Prerequisites
+
+- Go 1.22+
+- Linux/macOS/Windows
+
+### Build
+
+```bash
+make deps      # Download dependencies
+make test      # Run tests (should pass)
+make build     # Build binary to dist/lastfm-sync
+```
+
+### Verify Installation
+
+```bash
+./dist/lastfm-sync --help
+./dist/lastfm-sync --version
+```
+
+## Architecture
+
+```
+lastfm-sync/
+├── cmd/lastfm-sync/           # CLI entry point
+│   └── main.go                # Cobra root command
+├── internal/
+│   ├── config/                # Config parsing & validation
+│   │   └── types.go
+│   ├── logging/               # Structured logging (zap)
+│   │   └── logger.go
+│   ├── models/                # Core data types
+│   │   ├── scrobble.go        # Scrobble record (NDJSON contract)
+│   │   └── watermark.go       # Watermark for incremental sync
+│   └── version/               # Build info
+└── Makefile                   # Build automation
+```
+
+## Data Contracts
+
+### Scrobble Record (NDJSON)
+
+Each line in output is a JSON object:
+
+```json
+{
+  "username": "alice",
+  "artist": "Radiohead",
+  "track": "Idioteque",
+  "album": "Kid A",
+  "uts": 971136000,
+  "mbid": "12345-...",
+  "source": "lastfm",
+  "ingested_at": "2025-10-30T18:12:00Z",
+  "raw": { ... }
+}
+```
+
+### Watermark Record
+
+Tracks progress for incremental syncs:
+
+```json
+{
+  "username": "alice",
+  "max_uts": 1719792720,
+  "updated_at": "2025-10-30T18:12:00Z",
+  "sync_id": "sync-20251030-abc123"
+}
+```
+
+## Logging & Security
+
+### Structured Logging (JSON)
+
+All output is JSON for easy parsing:
+
+```bash
+./dist/lastfm-sync --log-level debug fetch --user alice
+```
+
+### Secret Redaction
+
+Sensitive values (API keys, SAS tokens) are automatically redacted as `****last4`:
+
+```go
+logger.WithRedacted("api_key", fullKey)  // Logs as ****key0
+```
+
+## Testing
+
+```bash
+# Unit tests (all packages)
+make test
+
+# With coverage report
+make test-coverage
+
+# View coverage
+open coverage.html
+```
+
+**Current Coverage**:
+- `internal/models`: 100%
+- `internal/logging`: 93.8%
+- `internal/config`: 0% (type definitions only, no logic)
+
+## Dependencies
+
+- **spf13/cobra**: CLI framework
+- **spf13/viper**: Configuration management
+- **uber-go/zap**: Structured logging
+- **cenkalti/backoff**: Exponential backoff
+- **golang.org/x/time/rate**: Rate limiting
+- **Azure SDK for Go**: Azure Blob Storage support
+
+## Next Steps
+
+1. **Implement Last.fm API client** (`internal/lastfm/client.go`)
+   - HTTP client with retry middleware
+   - Pagination support
+   - Rate limiting integration
+
+2. **Implement fetch command** (`cmd/lastfm-sync/commands/fetch.go`)
+   - CLI flag parsing
+   - Config validation
+   - Orchestration of fetch → transform → write
+
+3. **Implement writers** (`internal/writer/`)
+   - Local NDJSON writer
+   - Azure Blob writer
+   - Atomic flush + watermark updates
+
+## License
+
+Apache License 2.0 - See LICENSE file
+
+## Contributing
+
+See `.specify/specs/001-lastfm-scrobble-cli/` for complete specification and implementation plan.
+
+---
+
+**Status**: Phase 1 Complete ✅ | Phase 2 Starting  
+**Spec**: `.specify/specs/001-lastfm-scrobble-cli/spec.md`  
+**Plan**: `.specify/specs/001-lastfm-scrobble-cli/plan.md`

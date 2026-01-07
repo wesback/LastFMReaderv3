@@ -1,0 +1,58 @@
+name: Test
+
+on:
+  push:
+    branches: [main, develop, 001-lastfm-scrobble-cli]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:latest
+        ports:
+          - 10000:10000  # Blob Storage
+          - 10001:10001  # Queue Storage
+          - 10002:10002  # Table Storage
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22
+          cache: true
+
+      - name: Run go fmt check
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Go files not formatted:"
+            gofmt -s -d .
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run tests with race detector
+        env:
+          AZURITE_HOST: 127.0.0.1
+          AZURITE_PORT: 10000
+        run: go test -race -cover -v ./...
+
+      - name: Generate coverage report
+        if: always()
+        run: |
+          go test -race -coverprofile=coverage.out -v ./...
+          go tool cover -func=coverage.out
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false

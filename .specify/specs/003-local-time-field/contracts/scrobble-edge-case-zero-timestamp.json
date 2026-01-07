@@ -1,0 +1,19 @@
+{
+  "username": "test_user",
+  "artist": "Unknown Artist",
+  "track": "Unknown Track",
+  "album": "",
+  "uts": 0,
+  "local_time": "",
+  "source": "lastfm",
+  "ingested_at": "2024-01-06T15:00:00Z",
+  "raw": {
+    "artist": {
+      "#text": "Unknown Artist"
+    },
+    "name": "Unknown Track",
+    "date": {
+      "uts": "0"
+    }
+  }
+}

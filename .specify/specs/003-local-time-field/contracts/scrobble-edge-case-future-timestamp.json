@@ -1,0 +1,22 @@
+{
+  "username": "future_user",
+  "artist": "Future Band",
+  "track": "Y2K38 Song",
+  "album": "Post-Epoch",
+  "uts": 2147483648,
+  "local_time": "2038-01-19T03:14:08Z",
+  "source": "lastfm",
+  "ingested_at": "2024-01-06T15:00:00Z",
+  "raw": {
+    "artist": {
+      "#text": "Future Band"
+    },
+    "name": "Y2K38 Song",
+    "album": {
+      "#text": "Post-Epoch"
+    },
+    "date": {
+      "uts": "2147483648"
+    }
+  }
+}

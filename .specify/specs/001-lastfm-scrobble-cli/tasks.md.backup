@@ -1,0 +1,775 @@
+---
+description: "Task list for Last.fm Scrobble CLI implementation"
+---
+
+# Tasks: Last.fm Scrobble CLI with Incremental Sync
+
+**Input**: Design documents from `/specs/001-lastfm-scrobble-cli/`  
+**Prerequisites**: `plan.md` (required), `spec.md` (required for user stories)  
+**Tests**: All test tasks included; TDD mandatory per constitution  
+**Organization**: Tasks grouped by user story for independent implementation and testing
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[ID]**: Unique task identifier (T001, T002, etc.)
+- **[P]**: Task can run in parallel with others (different packages, no dependencies)
+- **[Story]**: User story identifier (US1, US2, US3, US4, US5)
+- **File paths**: Relative to repository root; Go package structure per `plan.md`
+
+---
+
+## Phase 1: Setup & Project Initialization
+
+**Purpose**: Initialize Go project, dependencies, and build infrastructure
+
+- [ ] T001 [P] Create Go module `github.com/user/lastfm-reader` in repository root
+- [ ] T002 [P] Initialize `go.mod` and `go.sum` with primary dependencies (cobra, viper, zap, Azure SDK, backoff, rate)
+- [ ] T003 [P] Create directory structure per plan: `cmd/lastfm-sync/`, `internal/{config,lastfm,watermark,writer,ratelimit,logging,version}/`, `pkg/testutil/`
+- [ ] T004 [P] Create `Makefile` with targets: `deps`, `lint`, `test`, `test-coverage`, `build`, `build-all`, `docker`, `release`
+- [ ] T005 [P] Create `.golangci.yml` with strict linting rules (gocyclo < 10, errcheck, ineffassign, misspell)
+- [ ] T006 [P] Create `Dockerfile` (multi-stage: build + distroless nonroot runtime)
+- [ ] T007 [P] Create `.github/workflows/test.yml` (lint, test with Azurite service, coverage upload)
+- [ ] T008 [P] Create `.github/workflows/release.yml` (cross-compile, docker build/push, GitHub release)
+- [ ] T009 [P] Create `go.mod` build info injection setup for version, timestamp (in `cmd/lastfm-sync/main.go`)
+- [ ] T010 [P] Create `README.md` template with usage, installation, examples (to be filled during polish)
+- [ ] T011 [P] Create `LICENSE` (Apache-2.0) and `NOTICE` files
+
+---
+
+## Phase 2: Foundational Infrastructure (Blocking Prerequisites)
+
+**Purpose**: Core packages that all user stories depend on; MUST be complete before story implementation
+
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete
+
+### Configuration & Logging
+
+- [ ] T012 [P] Create `internal/logging/logger.go` with zap setup, JSON encoding, secret redaction function
+  - Implement `NewLogger(level string) *zap.Logger`
+  - Implement `redactSecret(s string) string` → returns `****{last4chars}`
+  - Add custom encoder for sensitive fields
+  - Unit tests: secret masking, JSON output validation
+
+- [ ] T013 [P] Create `internal/config/models.go` with Config struct hierarchy
+  - `Config` → `Auth`, `Client`, `Output`, `Watermark`, `Logging`
+  - Include field tags for viper: `mapstructure`, `yaml`, `json`
+  - Document defaults inline
+
+- [ ] T014 [P] Create `internal/config/config.go` with Viper loading
+  - `LoadConfig(configPath, flags)` → merges flags > env > file > defaults
+  - Support YAML/TOML/JSON config files
+  - Path expansion for `~/.lastfm/`, `$XDG_CONFIG_HOME`
+  - Return `*Config` or error
+
+- [ ] T015 Create `internal/config/validation.go` with config validation
+  - `ValidateConfig(cfg *Config)` → checks required fields (LASTFM_API_KEY, output target, Azure if needed)
+  - Clear error messages for validation failures
+  - Unit tests: valid configs pass, invalid configs fail with helpful errors
+
+### Last.fm API Client (Core)
+
+- [ ] T016 [P] Create `internal/lastfm/models.go` with data structures
+  - `ScrobbleResponse` (from Last.fm API)
+  - `Page` struct (results, page info, total)
+  - Parse Last.fm API JSON response structure
+  - Unit tests: JSON unmarshaling, edge cases (missing fields)
+
+- [ ] T017 [P] Create `internal/lastfm/client.go` with HTTP client
+  - `Client` struct: BaseURL, APIKey, Timeout, Limiter, RetryMax
+  - `NewClient(config) *Client`
+  - `FetchPage(ctx, username, from, until, pageNum, pageSize) (*Page, error)`
+  - Implement retry logic (429, 5xx) with backoff (stub calls to ratelimit package)
+  - Timeout enforcement per request
+  - Unit tests: basic client creation, timeout handling (mock server)
+
+- [ ] T018 [P] Create `internal/lastfm/pagination.go` with pagination helpers
+  - `FilterNowPlaying(scrobbles) []Scrobble` → exclude entries without date.uts
+  - `IsShortCircuit(page, watermark) bool` → check if 0 records with uts > watermark
+  - Unit tests: filtering, short-circuit detection
+
+### Rate Limiting & Retry
+
+- [ ] T019 [P] Create `internal/ratelimit/limiter.go` with rate limiter
+  - `Limiter` struct: wraps `golang.org/x/time/rate.Limiter`, backoff
+  - `NewLimiter(qps int, maxRetries int) *Limiter`
+  - `Wait(ctx)` → token bucket enforcement (sleep if needed)
+  - Unit tests: QPS enforcement (measure time between calls), token distribution
+
+- [ ] T020 [P] Create `internal/ratelimit/backoff.go` with retry strategy
+  - `DoWithRetry(ctx, fn, maxRetries)` → exponential backoff (1s, 2s, 4s, 8s, max 32s)
+  - `ParseRetryAfter(headers)` → extract Retry-After header if present
+  - `IsRetryable(err)` → classify errors (429, 5xx → true; others → false)
+  - Unit tests: exponential sequence, max retries enforced, Retry-After honored
+
+### Writer Interface & Local Implementation
+
+- [ ] T021 [P] Create `internal/writer/writer.go` with Scrobble type and Writer interface
+  - `Scrobble` struct: username, artist, track, album, uts, mbid, source, ingested_at, raw
+  - `Writer` interface: `WriteBatch(ctx, records []Scrobble) error`, `Flush(ctx) error`, `Close(ctx) error`
+  - JSON struct tags for NDJSON marshaling
+  - Unit tests: struct marshaling to JSON
+
+- [ ] T022 Create `internal/writer/local.go` with LocalWriter
+  - `LocalWriter` struct: filepath, file handle, buffered writer, fsync behavior
+  - `NewLocalWriter(filepath) (*LocalWriter, error)` → create or open existing file
+  - `WriteBatch(ctx, records)` → write NDJSON (one JSON per line, buffered)
+  - `Flush(ctx)` → flush buffer + fsync
+  - `Close(ctx)` → cleanup, close file
+  - Unit tests: append to file, fsync called, NDJSON format valid, error handling (permission denied)
+
+### Watermark Store Interface & File Implementation
+
+- [ ] T023 [P] Create `internal/watermark/store.go` with WatermarkStore interface and Watermark type
+  - `Watermark` struct: username, max_uts, updated_at, sync_id
+  - `WatermarkStore` interface: `Get(ctx, username) (uts int64, exists bool, err)`, `Put(ctx, username, uts) error`
+  - Unit tests: interface definition
+
+- [ ] T024 Create `internal/watermark/file.go` with FileStore
+  - `FileStore` struct: base directory path
+  - `NewFileStore(basePath) *FileStore`
+  - `Get(ctx, username)` → read JSON watermark file `{basePath}/{username}.watermark`
+  - `Put(ctx, username, uts)` → write atomically (temp file + rename)
+  - Serialize watermark with updated_at timestamp and sync_id
+  - Unit tests: read/write, atomic updates, missing file handling, concurrent access (file lock consideration)
+
+### Azure Writer & Watermark Store (Stub Interfaces)
+
+- [ ] T025 [P] Create `internal/writer/azure.go` with AzureWriter stub
+  - Struct: temp dir, container client, prefix, username
+  - `NewAzureWriter(container, prefix, username, tempDir) (*AzureWriter, error)`
+  - `WriteBatch(ctx, records)` → write to temp file (reuse local writer pattern)
+  - `Flush(ctx)` → upload temp file to Azure blob (path: `{prefix}dt=YYYY-MM-DD/{username}-HHMMSS.ndjson`)
+  - `Close(ctx)` → delete temp file
+  - Unit tests (integration): placeholder for Azurite tests
+
+- [ ] T026 [P] Create `internal/watermark/azure.go` with AzureStore stub
+  - Struct: container client, prefix
+  - `NewAzureStore(container, prefix) *AzureStore`
+  - `Get(ctx, username)` → read blob `{prefix}{username}.watermark`
+  - `Put(ctx, username, uts)` → write blob with ETag concurrency check
+  - Unit tests (integration): placeholder for Azurite tests
+
+### CLI Framework & Command Skeleton
+
+- [ ] T027 [P] Create `cmd/lastfm-sync/main.go` with cobra root command
+  - Initialize cobra root cmd with version/help
+  - Version injection from build flags
+  - Global flags: `--log-level`, `--config-path`
+
+- [ ] T028 [P] Create `cmd/lastfm-sync/commands/fetch.go` with fetch command skeleton
+  - `NewFetchCmd()` → returns cobra.Command
+  - Parse all CLI flags per plan (--user, --since, --until, --output, --azure-*, --qps, --timeout, etc.)
+  - Stub: minimal Run function (to be filled in user story tasks)
+
+- [ ] T029 [P] Create `cmd/lastfm-sync/commands/show-watermark.go`
+  - Command to display current watermark for a user
+  - Stub implementation (full in Polish phase)
+
+- [ ] T030 [P] Create `cmd/lastfm-sync/commands/set-watermark.go`
+  - Command to manually set watermark (recovery/migration)
+  - Stub implementation
+
+- [ ] T031 [P] Create `cmd/lastfm-sync/commands/version.go`
+  - Display build info (version, build time, git commit)
+
+### Test Utilities & Fixtures
+
+- [ ] T032 [P] Create `pkg/testutil/fixtures.go` with mock data generators
+  - `GenerateScrobbles(count int) []writer.Scrobble`
+  - `MockLastfmPage(pageNum, pageSize int, maxUts int64) *lastfm.Page`
+  - Helper to create mock HTTP responses
+
+- [ ] T033 [P] Create `pkg/testutil/mocks.go` with mock implementations
+  - `MockWriter` impl of `Writer` interface
+  - `MockWatermarkStore` impl of `WatermarkStore` interface
+  - `MockLastfmClient` impl (if needed for integration tests)
+
+**Checkpoint**: Foundation complete. All user stories can now proceed in parallel.
+
+---
+
+## Phase 3: User Story 1 - Initial Full Scrobble History Fetch (Priority: P1) 🎯 MVP
+
+**Goal**: User can fetch complete Last.fm scrobble history to local NDJSON file in one run
+
+**Independent Test**: Mock Last.fm API → run fetch → verify NDJSON output contains all records with correct format
+
+### Tests for User Story 1 (TDD: Write First, Ensure Fail)
+
+- [ ] T034 [P] [US1] Unit test: Last.fm client pagination in `internal/lastfm/client_test.go`
+  - Test `FetchPage` with mock HTTP server returning paginated responses
+  - Verify `from` parameter correctly passed
+  - Verify page accumulation across multiple calls
+  - Test boundary conditions (page 1, last page, single page)
+  - Test "now playing" filtering
+
+- [ ] T035 [P] [US1] Unit test: LocalWriter NDJSON output in `internal/writer/local_test.go`
+  - Verify NDJSON format (one JSON per line)
+  - Verify all fields present (username, artist, track, album, uts, mbid, source, ingested_at, raw)
+  - Verify append behavior (multiple WriteBatch calls)
+  - Verify file sync on flush
+
+- [ ] T036 [P] [US1] Unit test: FileStore watermark in `internal/watermark/file_test.go`
+  - Verify watermark file created after first sync
+  - Verify watermark contains correct max_uts value
+  - Verify atomic write (no corruption on crash)
+
+- [ ] T037 [US1] Integration test: Full fetch → write → watermark flow in `cmd/lastfm-sync/integration_test.go`
+  - Mock Last.fm API with 3 pages (200 records each)
+  - Run `lastfm-sync fetch --user alice --output local --out-path /tmp/alice.ndjson`
+  - Verify NDJSON file created with 600 records
+  - Verify watermark file created with correct max_uts
+  - Verify no duplicates (uniqueness check)
+
+### Implementation for User Story 1
+
+- [ ] T038 [US1] Implement Last.fm client retry middleware in `internal/lastfm/client.go`
+  - Integrate `ratelimit.DoWithRetry` for resilience
+  - Test with mock 429 response (verify retry + backoff)
+  - Test with mock 5xx response (verify retry limit)
+
+- [ ] T039 [US1] Complete LocalWriter implementation in `internal/writer/local.go`
+  - Add `SetUsername(username string)` to track user (for ingested_at enrichment)
+  - Verify NDJSON format compliance in tests
+
+- [ ] T040 [US1] Complete FileStore implementation in `internal/watermark/file.go`
+  - Atomic writes with temp file + rename
+  - Error handling for file system issues
+
+- [ ] T041 [US1] Implement fetch command logic in `cmd/lastfm-sync/commands/fetch.go`
+  - Parse config from flags (viper integration)
+  - Validate required fields (LASTFM_API_KEY, --user)
+  - Create Last.fm client, LocalWriter, FileStore
+  - Main fetch loop:
+    - Load watermark for user
+    - Calculate effective lower bound: `max(--since, watermark)`
+    - Pagination loop: fetch page → transform → write batch → update watermark
+    - Check short-circuit (0 records with uts > watermark)
+    - Exit on completion
+
+- [ ] T042 [US1] Implement structured logging in fetch flow `internal/logging/logger.go` + fetch command
+  - Log events: fetch.start, fetch.page, fetch.write, watermark.update, fetch.complete
+  - Track metrics: pages_fetched, records_written, bytes_written, total_duration
+
+- [ ] T043 [US1] Add error handling and user messages
+  - Clear error messages on API key missing, invalid user, file permission denied
+  - Exit codes: 0 on success, 1 on failure
+
+- [ ] T044 [US1] Implement --dry-run mode
+  - Preview what would be fetched without making API calls or writing
+  - Log: "Would fetch X pages, Y records to {output_path}"
+
+**Checkpoint**: User Story 1 complete. User can fetch full history to local file. P1 MVP foundation ready.
+
+---
+
+## Phase 4: User Story 2 - Incremental Sync with Watermarking (Priority: P1) 🎯 MVP
+
+**Goal**: Subsequent runs fetch only new scrobbles since last sync; watermark-based idempotent resumption
+
+**Independent Test**: First run fetches all → second run (with new API data) fetches only delta → verify no duplicates
+
+### Tests for User Story 2 (TDD: Write First)
+
+- [ ] T045 [P] [US2] Unit test: Watermark logic in `internal/lastfm/client_test.go`
+  - Test effective lower bound: `max(--since, watermark)`
+  - Test watermark override with --since flag
+  - Test short-circuit on zero new records
+
+- [ ] T046 [P] [US2] Unit test: Idempotency check in `internal/writer/local_test.go`
+  - Write same batch twice → verify no duplicates in file
+  - Verify uniqueness by (username, uts, artist, track)
+
+- [ ] T047 [US2] Integration test: Incremental sync flow in `cmd/lastfm-sync/integration_test.go`
+  - Run 1: Mock API returns pages 1-3 (uts 100-300)
+  - Verify watermark = 300
+  - Run 2: Mock API returns pages 1-2 (uts 100-200) + pages 3-5 (new, uts 301-500)
+  - Verify only pages 3-5 fetched (effective_from = 300)
+  - Verify output file has 600 total records (no duplicates)
+  - Verify watermark = 500
+
+- [ ] T048 [US2] Integration test: Crash recovery in `cmd/lastfm-sync/integration_test.go`
+  - Simulate process kill after page 1 written but before watermark update
+  - Rerun: verify page 1 records NOT duplicated (watermark still at 0)
+  - Verify correct recovery from page 1
+
+### Implementation for User Story 2
+
+- [ ] T049 [US2] Enhance LastfmClient.FetchPage to accept `from` (watermark-based lower bound)
+  - Pass as `from` parameter to Last.fm API
+  - Unit tests: from parameter correctly set
+
+- [ ] T050 [US2] Enhance fetch command to load and use watermark `cmd/lastfm-sync/commands/fetch.go`
+  - Load watermark before pagination loop
+  - Calculate: `effective_from = max(--since flag, watermark.max_uts)`
+  - Pass to FetchPage
+
+- [ ] T051 [US2] Implement short-circuit in pagination loop
+  - After each page: check if `0 records with uts > current watermark`
+  - If true: exit pagination (no need to fetch earlier pages)
+  - Unit + integration tests
+
+- [ ] T052 [US2] Implement atomic watermark updates in fetch loop
+  - Update watermark after each successfully flushed page (not at end)
+  - Use atomic writes to prevent corruption on crash
+  - Verify in integration test: kill after write, before watermark update → correct recovery
+
+- [ ] T053 [US2] Add --since flag validation and interaction with watermark
+  - If both --since and watermark present: use max
+  - Test all combinations
+
+**Checkpoint**: User Story 2 complete. Incremental sync working with crash-safe watermarks. Full P1 MVP ready.
+
+---
+
+## Phase 5: User Story 3 - Azure Blob Storage Output (Priority: P2)
+
+**Goal**: User can write scrobbles to Azure Blob Storage with time-partitioned paths and managed identity auth
+
+**Independent Test**: Mock Azure (Azurite) → run fetch with --output azure → verify blob structure and watermark
+
+### Tests for User Story 3 (TDD: Write First)
+
+- [ ] T054 [P] [US3] Unit test: Azure blob path formatting in `internal/writer/azure_test.go`
+  - Test path construction: `{prefix}dt=YYYY-MM-DD/{username}-YYYYMMDD-HHMMSS.ndjson`
+  - Verify date partitioning
+  - Verify filename uniqueness (timestamp component)
+
+- [ ] T055 [P] [US3] Unit test: AzureStore watermark in `internal/watermark/azure_test.go`
+  - Test watermark blob path: `{prefix}{username}.watermark`
+  - Mock ETag concurrency scenarios
+
+- [ ] T056 [US3] Integration test: Azure end-to-end with Azurite in `cmd/lastfm-sync/integration_test.go`
+  - Start Azurite container (managed by test framework)
+  - Mock Last.fm API with 2 pages
+  - Run `lastfm-sync fetch --user alice --output azure --azure-container test --azure-prefix lastfm/ --azure-auth default`
+  - Verify blob created: `lastfm/dt=YYYY-MM-DD/alice-HHMMSS.ndjson`
+  - Verify watermark blob created: `lastfm/alice.watermark`
+  - Rerun: verify new blob created (not overwritten)
+
+- [ ] T057 [US3] Integration test: Azure auth methods in `cmd/lastfm-sync/integration_test.go`
+  - Test DefaultAzureCredential (mock)
+  - Test connection string auth (with env var)
+  - Test SAS token auth (with container URL + token env var)
+
+### Implementation for User Story 3
+
+- [ ] T058 Create `internal/config/azure.go` with Azure auth resolution
+  - Parse `--azure-auth` flag (default, connstr, sas)
+  - Create appropriate credential provider (DefaultAzureCredential, connection string, SAS)
+  - Unit tests: credential selection logic
+
+- [ ] T059 [P] [US3] Complete AzureWriter implementation in `internal/writer/azure.go`
+  - Use local writer pattern for temp file buffering
+  - `Flush()` → upload temp file to Azure with time-partitioned blob name
+  - `Close()` → delete temp file on success, leave for debugging on error
+  - Set Content-Type: `application/x-ndjson`
+  - Unit + integration tests
+
+- [ ] T060 [P] [US3] Complete AzureStore implementation in `internal/watermark/azure.go`
+  - `Get()` → read watermark blob (handle not-found)
+  - `Put()` → write watermark blob with ETag concurrency check (prevent concurrent writes)
+  - Unit + integration tests with Azurite
+
+- [ ] T061 [US3] Enhance fetch command to support Azure output in `cmd/lastfm-sync/commands/fetch.go`
+  - Parse `--output azure` flag
+  - Parse `--azure-container`, `--azure-prefix`, `--azure-auth`, `--azure-account`, `--azure-container-url`
+  - Create AzureWriter + AzureStore based on auth method
+  - Validate required Azure fields present
+  - Unit + integration tests
+
+- [ ] T062 [US3] Implement auto-watermark-store selection
+  - If `--output azure` and `--watermark-store` not specified: auto-use azure
+  - If `--output local` and `--watermark-store` not specified: use file
+  - Allow explicit override via `--watermark-store` flag
+
+- [ ] T063 [US3] Add Azure secret redaction in logging
+  - Redact connection strings and SAS tokens as `****last4`
+  - Test in unit tests
+
+**Checkpoint**: User Story 3 complete. Azure Blob output with incremental sync. Cloud integration ready.
+
+---
+
+## Phase 6: User Story 4 - Rate Limit Compliance and Backoff (Priority: P2)
+
+**Goal**: Respect Last.fm 3 QPS limit; automatic exponential backoff on 429/5xx; no API bans
+
+**Independent Test**: Throttle to 3 QPS → verify requests take ≥ 30s for 100 calls; mock 429 → verify backoff
+
+### Tests for User Story 4 (TDD: Write First)
+
+- [ ] T064 [P] [US4] Unit test: Rate limiter QPS enforcement in `internal/ratelimit/limiter_test.go`
+  - Create limiter with QPS=3
+  - Make 10 requests
+  - Measure time elapsed
+  - Verify: time ≥ 3.33 seconds (10 requests / 3 QPS)
+
+- [ ] T065 [P] [US4] Unit test: Exponential backoff sequence in `internal/ratelimit/backoff_test.go`
+  - Test backoff sequence: 1s, 2s, 4s, 8s, 16s, 32s (capped)
+  - Verify max retries enforced
+  - Verify jitter optional (no jitter for deterministic tests)
+
+- [ ] T066 [P] [US4] Unit test: Retry-After header parsing in `internal/ratelimit/backoff_test.go`
+  - Parse Retry-After: 60 → use 60s instead of backoff sequence
+  - Verify fallback to backoff if header missing
+
+- [ ] T067 [US4] Unit test: Retryable error classification in `internal/ratelimit/backoff_test.go`
+  - 429 → retryable
+  - 5xx → retryable
+  - 4xx (except 429) → not retryable
+  - network timeout → retryable
+
+- [ ] T068 [US4] Integration test: 429 retry flow in `cmd/lastfm-sync/integration_test.go`
+  - Mock Last.fm API: return 429 for first 2 requests, then 200
+  - Run fetch
+  - Verify retry occurred (check logs for retry events)
+  - Verify request succeeded after backoff
+
+- [ ] T069 [US4] Integration test: 5xx retry flow in `cmd/lastfm-sync/integration_test.go`
+  - Mock Last.fm API: return 503 for first request, then 200
+  - Run fetch
+  - Verify retry occurred, succeeded after backoff
+
+### Implementation for User Story 4
+
+- [ ] T070 [P] [US4] Enhance Last.fm client to use rate limiter in `internal/lastfm/client.go`
+  - Integrate `ratelimit.Limiter` with `DoWithRetry`
+  - Every HTTP request calls `limiter.Wait(ctx)` before executing
+  - Test with mocked limiter
+
+- [ ] T071 [P] [US4] Implement Retry-After header parsing in `internal/ratelimit/backoff.go`
+  - Extract `Retry-After` header from response
+  - Use specified duration if present, else exponential backoff
+
+- [ ] T072 [US4] Add --qps and --timeout flags to fetch command `cmd/lastfm-sync/commands/fetch.go`
+  - `--qps` flag (default 3) → passed to rate limiter
+  - `--timeout` flag (default 15s) → passed to HTTP client
+
+- [ ] T073 [US4] Implement timeout enforcement in Last.fm client `internal/lastfm/client.go`
+  - Set `http.Client.Timeout` from config
+  - Verify timeout errors are retryable
+  - Unit tests: timeout triggers retry
+
+- [ ] T074 [US4] Add retry metrics to logging `internal/logging/logger.go` + fetch command
+  - Log `retry` event with attempt number, reason (429/5xx/timeout), backoff duration
+  - Track `retries_total`, `rate_limit_hits` counters
+
+- [ ] T075 [US4] Verify Last.fm API compliance
+  - Ensure no excessive requests (manual testing against real API if possible)
+  - Document QPS calculation: 3 QPS → 1 request per 333ms
+
+**Checkpoint**: User Story 4 complete. Rate limiting and resilience production-ready.
+
+---
+
+## Phase 7: User Story 5 - Dry Run and Debugging (Priority: P3)
+
+**Goal**: Preview fetch plan without API calls or writes; debug with --log-level debug
+
+**Independent Test**: Run with --dry-run → no HTTP calls, no file writes → show plan
+
+### Tests for User Story 5 (TDD: Write First)
+
+- [ ] T076 [P] [US5] Unit test: Dry-run path in fetch command `cmd/lastfm-sync/commands/fetch_test.go`
+  - Run with --dry-run flag
+  - Verify no HTTP requests (via mock client spy)
+  - Verify no writes (via mock writer spy)
+  - Verify watermark not updated (via mock store spy)
+
+- [ ] T077 [P] [US5] Integration test: Dry-run output in `cmd/lastfm-sync/integration_test.go`
+  - Run `lastfm-sync fetch --user alice --dry-run --log-level debug`
+  - Verify logs show planned pages, expected records, output path
+  - Verify no files created
+  - Verify exit code 0
+
+- [ ] T078 [P] [US5] Unit test: Debug logging in `internal/logging/logger_test.go`
+  - --log-level debug → includes page details, records per page, bytes
+  - --log-level info → only high-level events
+  - Verify JSON structure valid at both levels
+
+### Implementation for User Story 5
+
+- [ ] T079 [US5] Implement --dry-run flag in fetch command `cmd/lastfm-sync/commands/fetch.go`
+  - Add CLI flag `--dry-run` (bool, default false)
+  - When true: skip all writes and API calls
+  - Log detailed plan instead
+
+- [ ] T080 [US5] Create MockWriter for dry-run testing `pkg/testutil/mocks.go`
+  - Implement Writer interface
+  - Track calls without writing
+  - Verify no writes occurred in tests
+
+- [ ] T081 [US5] Add debug event details in fetch loop
+  - Log page-by-page details when --log-level debug
+  - Show: page_num, total_pages, records_count, bytes, duration_ms
+  - Show watermark value before/after each page
+
+- [ ] T082 [US5] Add help text with examples `cmd/lastfm-sync/commands/fetch.go`
+  - `lastfm-sync fetch --help` shows all flags with descriptions
+  - Include example commands (local, azure, dry-run)
+
+**Checkpoint**: User Story 5 complete. Debugging and preview features ready.
+
+---
+
+## Phase 8: Shared Testing & Quality Gates
+
+**Purpose**: Cross-cutting test suite, performance benchmarks, code quality
+
+### Comprehensive Testing
+
+- [ ] T083 [P] Integration test: Config loading from file `cmd/lastfm-sync/integration_test.go`
+  - Create `config.yaml` with test values
+  - Load via `--config-path`
+  - Verify flags > env > file priority
+  - Test env var override of config file
+
+- [ ] T084 [P] Integration test: Help and version commands in `cmd/lastfm-sync/integration_test.go`
+  - Run `lastfm-sync --help` → show usage
+  - Run `lastfm-sync version` → show build info
+  - Run `lastfm-sync fetch --help` → show fetch-specific options
+
+- [ ] T085 [P] Performance benchmark: NDJSON write throughput in `internal/writer/bench_test.go`
+  - Benchmark writing 10K scrobbles
+  - Target: > 200 scrobbles/sec
+  - Measure CPU, memory usage
+
+- [ ] T086 [P] Performance benchmark: Rate limiter overhead in `internal/ratelimit/bench_test.go`
+  - Benchmark DoWithRetry with 1000 success calls (no retries)
+  - Target: < 1ms overhead per call
+
+- [ ] T087 [P] Linting and code quality checks
+  - Run `make lint` → golangci-lint passes with strict rules
+  - Run `go test -race ./...` → no race conditions detected
+  - Verify coverage report: ≥ 80% overall, ≥ 90% critical packages (lastfm, watermark, writer)
+
+- [ ] T088 [P] Contract tests for data structures in `internal/lastfm/models_test.go`, `internal/writer/writer_test.go`
+  - Verify NDJSON scrobble record has all required fields
+  - Verify watermark JSON structure correct
+  - Test edge cases (nil mbid, missing fields)
+
+### End-to-End Scenarios
+
+- [ ] T089 Integration test: Full multi-page fetch to completion in `cmd/lastfm-sync/integration_test.go`
+  - Mock Last.fm API with 10 pages (25 pages total, simulating 5K scrobbles)
+  - Fetch all pages
+  - Verify all records in output file
+  - Verify final watermark = max uts
+
+- [ ] T090 Integration test: Mixed local + Azure watermarks in `cmd/lastfm-sync/integration_test.go`
+  - Run 1: --output local --watermark-store file → verify both created
+  - Run 2: same → verify watermark read, incremental sync works
+  - Run 3: switch to --output azure --watermark-store azure → new watermark location, Azure writes
+
+---
+
+## Phase 9: Documentation & Examples
+
+**Purpose**: User-facing and developer documentation
+
+- [ ] T091 [P] Complete `README.md` with sections:
+  - Installation (build from source, download binary, docker)
+  - Quick start (local fetch example)
+  - CLI usage (all flags, environment variables, config file)
+  - Azure examples (managed identity, SAS token, connection string)
+  - Kubernetes example (CronJob with Workload Identity)
+  - Architecture overview (component diagram)
+  - Testing guide (how to run tests locally, with Azurite)
+  - Contributing guide
+
+- [ ] T092 [P] Create inline code comments for complex logic
+  - Retry logic in `internal/lastfm/client.go`
+  - Watermark atomicity in `internal/watermark/file.go`
+  - Rate limiter in `internal/ratelimit/limiter.go`
+  - Azure blob upload strategy in `internal/writer/azure.go`
+
+- [ ] T093 [P] Create ARCHITECTURE.md with component diagram
+  - ASCII art or Mermaid diagram showing component interactions
+  - Data flow diagram
+  - Error handling strategies
+
+- [ ] T094 [P] Create SECURITY.md documenting:
+  - Secret redaction and logging practices
+  - Credential handling (API key, Azure auth)
+  - Container security (distroless, non-root)
+  - Azure Blob encryption and access controls
+
+- [ ] T095 Create example scripts and configs
+  - `examples/local-fetch.sh` → full example with local output
+  - `examples/azure-fetch.sh` → with managed identity
+  - `examples/config.yaml` → annotated config file
+  - `examples/k8s-cronjob.yaml` → Kubernetes deployment
+
+---
+
+## Phase 10: Docker & CI/CD
+
+**Purpose**: Build automation, container release, GitHub Actions
+
+- [ ] T096 [P] Dockerfile validation
+  - Build image locally
+  - Verify distroless runtime
+  - Verify non-root user
+  - Verify read-only filesystem
+  - Test image runs: `docker run --rm ghcr.io/org/lastfm-sync:test fetch --help` → shows help
+
+- [ ] T097 [P] GitHub Actions workflow: test.yml
+  - Linting passes on push
+  - Tests pass with race detector
+  - Azurite service available for integration tests
+  - Coverage upload to codecov
+
+- [ ] T098 [P] GitHub Actions workflow: release.yml
+  - Tag push (v*) triggers build
+  - Cross-compile for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
+  - Build Docker images with tags: `sha-<short>`, `v<version>`, `latest`
+  - Push to GHCR
+  - Create GitHub Release with binaries + changelog
+
+- [ ] T099 [P] Add branch protection rules in GitHub
+  - Require passing checks: lint, test, coverage > 80%
+  - Require PR review before merge
+
+---
+
+## Phase 11: Polish & Release Preparation
+
+**Purpose**: Final validation, documentation, versioning
+
+### Watermark & Show Commands
+
+- [ ] T100 Complete `cmd/lastfm-sync/commands/show-watermark.go`
+  - `lastfm-sync show-watermark --user alice [--watermark-store file] [--state-path ~/.lastfm]`
+  - Display: username, max_uts, updated_at, sync_id
+  - Support both file and Azure stores
+
+- [ ] T101 Complete `cmd/lastfm-sync/commands/set-watermark.go`
+  - `lastfm-sync set-watermark --user alice --uts 1234567890 [--watermark-store file]`
+  - Used for recovery/migration
+  - Confirmation prompt for safety
+
+### Final Validation
+
+- [ ] T102 [P] Run full test suite with coverage
+  - `make test-coverage` → verify ≥ 80% overall, ≥ 90% critical packages
+  - Fix any gaps
+
+- [ ] T103 [P] Code review checklist
+  - All functions documented with godoc comments
+  - All public types exported with clear names
+  - Error handling comprehensive (no unhandled errors)
+  - Logging consistent (event IDs, field names)
+
+- [ ] T104 [P] Manual testing scenarios
+  - Test local fetch (10K scrobbles)
+  - Test incremental sync (add new scrobbles, rerun)
+  - Test Azure (with Azurite or real Azure account)
+  - Test rate limiting (verify throttle)
+  - Test error handling (invalid API key, permission denied, etc.)
+
+### Release Preparation
+
+- [ ] T105 [P] Create CHANGELOG.md
+  - Document features: P1 fetch+incremental, P2 Azure+rate limit, P3 dry-run
+  - Document fixes: any bugs fixed during development
+  - Document known issues: any deferred work
+  - Version: 1.0.0
+
+- [ ] T106 [P] Finalize VERSION in code
+  - Set in `cmd/lastfm-sync/main.go` or build script: v1.0.0
+  - Verify version appears in `--version` output
+
+- [ ] T107 [P] Update go.mod + go.sum
+  - Run `make deps` → clean dependencies
+  - Verify all imports are used
+  - No stray dependencies
+
+- [ ] T108 [P] Final README review
+  - All examples tested and working
+  - Quick start clear and minimal
+  - All sections complete and accurate
+
+- [ ] T109 Tag release
+  - `git tag -a v1.0.0 -m "Release v1.0.0 - Last.fm Scrobble CLI MVP"`
+  - `git push origin v1.0.0`
+  - Trigger GitHub Actions release workflow
+
+- [ ] T110 Verify GitHub Release
+  - All binaries published (linux/amd64, arm64, darwin, windows)
+  - Docker images pushed to GHCR (v1.0.0, latest)
+  - Release notes + changelog visible on GitHub
+
+---
+
+## Definition of Done Checklist
+
+✅ **All Commands**:
+- [ ] `lastfm-sync fetch` — full implementation with all flags
+- [ ] `lastfm-sync show-watermark` — display watermark
+- [ ] `lastfm-sync set-watermark` — manual override (recovery)
+- [ ] `lastfm-sync version` — build info
+
+✅ **Writers** (with tests ≥ 90% coverage):
+- [ ] Local NDJSON writer (buffered, fsync, append)
+- [ ] Azure Blob writer (time-partitioned, temp file strategy)
+- [ ] Unit + integration tests for all scenarios
+
+✅ **Watermark Stores** (with tests ≥ 90% coverage):
+- [ ] File-based store (JSON, atomic writes)
+- [ ] Azure Blob store (ETag concurrency)
+- [ ] Crash recovery integration test
+
+✅ **Last.fm Client** (with tests ≥ 90% coverage):
+- [ ] Pagination (page boundaries, short-circuit)
+- [ ] Rate limiting (3 QPS, configurable)
+- [ ] Retry logic (429, 5xx, timeout with backoff)
+- [ ] Unit + integration tests with mock server
+
+✅ **Configuration** (with tests ≥ 80% coverage):
+- [ ] Flag parsing (all options)
+- [ ] Config file loading (YAML/TOML/JSON)
+- [ ] Env var override (flags > env > file)
+- [ ] Validation (required fields, helpful errors)
+
+✅ **Observability**:
+- [ ] Structured logging (zap, JSON)
+- [ ] Secret redaction (API keys, SAS tokens)
+- [ ] Event IDs (fetch.start, fetch.page, retry, etc.)
+- [ ] Dry-run mode (no writes/API calls)
+- [ ] Debug logging (--log-level debug)
+
+✅ **Docker & CI/CD**:
+- [ ] Multi-stage Dockerfile (build + distroless runtime)
+- [ ] GitHub Actions lint workflow (golangci-lint, go vet)
+- [ ] GitHub Actions test workflow (with Azurite service)
+- [ ] GitHub Actions release workflow (cross-compile, docker push)
+- [ ] Image tags: sha-<short>, vX.Y.Z, latest
+
+✅ **Documentation**:
+- [ ] README.md (usage, installation, examples)
+- [ ] ARCHITECTURE.md (components, data flow)
+- [ ] SECURITY.md (secrets, auth, container hardening)
+- [ ] CHANGELOG.md (features, fixes, known issues)
+- [ ] Inline godoc comments (all public functions)
+- [ ] Example scripts (local, azure, k8s)
+
+✅ **Testing** (Constitution compliance: 80%+ coverage):
+- [ ] Unit tests: ≥ 80% overall, ≥ 90% critical packages
+- [ ] Integration tests: full E2E with Azurite
+- [ ] Crash recovery tests: rerun after simulated failure
+- [ ] Performance benchmarks: throughput, latency targets
+- [ ] Linting: golangci-lint clean, go test -race pass
+- [ ] Code review: all design decisions documented
+
+✅ **Release**:
+- [ ] Version v1.0.0 tagged in git
+- [ ] Binaries: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
+- [ ] Docker images: ghcr.io/org/lastfm-sync:v1.0.0, :latest
+- [ ] GitHub Release with changelog + binaries
+- [ ] All tests passing on CI/CD
+
+---
+
+**Status**: Ready to begin implementation. All tasks sequenced for parallel execution where possible. Constitution compliance verified throughout (test-first, code quality, UX consistency, performance).
+

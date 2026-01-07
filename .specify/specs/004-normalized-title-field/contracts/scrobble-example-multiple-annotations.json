@@ -1,0 +1,26 @@
+{
+  "username": "complex_case",
+  "artist": "The Beatles",
+  "track": "Let It Be - Live from Rooftop Concert (2021 Remaster)",
+  "normalized_title": "Let It Be",
+  "album": "Let It Be",
+  "uts": 1704567600,
+  "local_time": "2025-01-06T17:30:00Z",
+  "mbid": "beatles-let-it-be-mbid",
+  "source": "lastfm",
+  "ingested_at": "2025-01-07T10:15:00Z",
+  "raw": {
+    "artist": {
+      "mbid": "beatles-mbid",
+      "#text": "The Beatles"
+    },
+    "name": "Let It Be - Live from Rooftop Concert (2021 Remaster)",
+    "album": {
+      "mbid": "let-it-be-album",
+      "#text": "Let It Be"
+    },
+    "date": {
+      "uts": "1704567600"
+    }
+  }
+}

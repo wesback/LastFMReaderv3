@@ -1,0 +1,25 @@
+{
+  "username": "john_doe",
+  "artist": "The Beatles",
+  "track": "Hey Jude",
+  "album": "Hey Jude",
+  "uts": 1704556800,
+  "local_time": "2024-01-06T14:00:00Z",
+  "source": "lastfm",
+  "ingested_at": "2024-01-06T14:05:32Z",
+  "raw": {
+    "artist": {
+      "#text": "The Beatles",
+      "mbid": "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
+    },
+    "album": {
+      "#text": "Hey Jude",
+      "mbid": ""
+    },
+    "name": "Hey Jude",
+    "date": {
+      "uts": "1704556800",
+      "#text": "06 Jan 2024, 14:00"
+    }
+  }
+}

@@ -1,0 +1,63 @@
+version: '3.8'
+
+# Docker Compose Schema for lastfm-sync
+# This schema documents the expected docker-compose.yml structure
+
+services:
+  lastfm-sync:
+    # Build configuration
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args: []  # Optional build arguments
+
+    # Image naming
+    image: lastfm-sync:dev
+
+    # Container name (optional, for clarity)
+    container_name: lastfm-sync
+
+    # Volume mounts
+    volumes:
+      - ./data:/data              # Bind mount for output (required)
+      - state:/app/.state          # Named volume for watermarks (optional)
+
+    # Environment configuration
+    env_file:
+      - .env                       # Load from .env file (required)
+
+    # Alternative: inline environment variables
+    # environment:
+    #   - LASTFM_USER=${LASTFM_USER}
+    #   - LASTFM_QPS=3
+
+    # Command override (optional)
+    # Default: --help (from Dockerfile CMD)
+    # Override at runtime: docker compose run lastfm-sync fetch --user alice
+    command: ["--help"]
+
+    # Restart policy
+    # "no" is default and appropriate for CLI tools (one-shot execution)
+    restart: "no"
+
+    # Network configuration (optional)
+    # Default bridge network is sufficient
+    # networks:
+    #   - default
+
+    # Resource limits (optional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M
+
+# Named volumes (if used)
+volumes:
+  state:
+    driver: local
+
+# Networks (optional, default bridge network auto-created)
+# networks:
+#   default:
+#     driver: bridge

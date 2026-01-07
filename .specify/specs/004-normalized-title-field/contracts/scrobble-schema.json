@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/lastfm-reader/lastfm-sync/scrobble.schema.json",
+  "title": "Scrobble",
+  "description": "A single track listen event from Last.fm with normalized_title field for canonical matching",
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string",
+      "description": "Last.fm username who scrobbled the track",
+      "minLength": 1
+    },
+    "artist": {
+      "type": "string",
+      "description": "Artist name",
+      "minLength": 1
+    },
+    "track": {
+      "type": "string",
+      "description": "Original track/song name from Last.fm",
+      "minLength": 1
+    },
+    "normalized_title": {
+      "type": "string",
+      "description": "Canonical track title with annotations removed (Live, Remastered, etc.)",
+      "minLength": 0,
+      "examples": [
+        "Bohemian Rhapsody",
+        "Stairway to Heaven",
+        "Hotel California"
+      ]
+    },
+    "album": {
+      "type": "string",
+      "description": "Album name (may be empty string)"
+    },
+    "uts": {
+      "type": "integer",
+      "description": "Unix timestamp (seconds since epoch) when track was played",
+      "minimum": 0
+    },
+    "local_time": {
+      "type": "string",
+      "description": "RFC3339 formatted timestamp in UTC derived from uts field. Empty string if uts <= 0.",
+      "format": "date-time",
+      "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)?$",
+      "examples": [
+        "2024-01-06T14:00:00Z",
+        "2038-01-19T03:14:08Z",
+        ""
+      ]
+    },
+    "mbid": {
+      "type": ["string", "null"],
+      "description": "MusicBrainz ID (optional)"
+    },
+    "source": {
+      "type": "string",
+      "description": "Data source identifier",
+      "enum": ["lastfm"]
+    },
+    "ingested_at": {
+      "type": "string",
+      "description": "UTC timestamp when record was created/ingested (RFC3339 format)",
+      "format": "date-time"
+    },
+    "raw": {
+      "type": "object",
+      "description": "Original Last.fm API response for debugging/audit purposes"
+    }
+  },
+  "required": [
+    "username",
+    "artist",
+    "track",
+    "normalized_title",
+    "album",
+    "uts",
+    "local_time",
+    "source",
+    "ingested_at",
+    "raw"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "username": "johndoe",
+      "artist": "Queen",
+      "track": "Bohemian Rhapsody - Remastered 2011",
+      "normalized_title": "Bohemian Rhapsody",
+      "album": "A Night at the Opera",
+      "uts": 1704556800,
+      "local_time": "2025-01-06T14:30:00Z",
+      "mbid": null,
+      "source": "lastfm",
+      "ingested_at": "2025-01-07T10:00:00Z",
+      "raw": {}
+    },
+    {
+      "username": "johndoe",
+      "artist": "Led Zeppelin",
+      "track": "Stairway to Heaven - Live at Madison Square Garden",
+      "normalized_title": "Stairway to Heaven",
+      "album": "The Song Remains the Same",
+      "uts": 1704560400,
+      "local_time": "2025-01-06T15:30:00Z",
+      "mbid": "abc123",
+      "source": "lastfm",
+      "ingested_at": "2025-01-07T10:00:00Z",
+      "raw": {}
+    }
+  ]
+}
