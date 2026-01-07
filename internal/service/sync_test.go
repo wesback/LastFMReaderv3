@@ -49,6 +49,7 @@ func TestSyncServiceCreation(t *testing.T) {
 	svc := NewSyncService(
 		"testuser",
 		100, 2000, // from, to
+		false,  // useSince
 		200, 0, // pageSize, maxPages
 		false, // dryRun
 		mockClient,
@@ -84,7 +85,7 @@ func TestSyncServiceContextCancellation(t *testing.T) {
 	mockWM := watermark.NewMockStore()
 	mockProgress := progress.NewNoOpProgressBar()
 
-	svc := NewSyncService("testuser", 100, 2000, 200, 0, false, mockClient, mockWriter, mockWM, logger, mockProgress)
+	svc := NewSyncService("testuser", 100, 2000, false, 200, 0, false, mockClient, mockWriter, mockWM, logger, mockProgress)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

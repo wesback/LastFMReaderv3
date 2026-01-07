@@ -12,7 +12,7 @@ func TestScrobbleNDJSON(t *testing.T) {
 	mbid := "12345678-1234-1234-1234-123456789012"
 	raw := json.RawMessage(`{"artist":"Radiohead","track":"Idioteque"}`)
 
-	scrobble := NewScrobble("alice", "Radiohead", "Idioteque", "Kid A", 971136000, &mbid, raw)
+	scrobble := NewScrobble("alice", "Radiohead", "Idioteque", "Kid A", 971136000, &mbid, raw, nil)
 
 	data, err := json.Marshal(scrobble)
 	if err != nil {
@@ -60,7 +60,7 @@ func TestScrobbleNDJSON(t *testing.T) {
 
 func TestScrobbleOmitNullMBID(t *testing.T) {
 	raw := json.RawMessage(`{}`)
-	scrobble := NewScrobble("alice", "Artist", "Track", "Album", 123456789, nil, raw)
+	scrobble := NewScrobble("alice", "Artist", "Track", "Album", 123456789, nil, raw, nil)
 
 	data, err := json.Marshal(scrobble)
 	if err != nil {
@@ -155,7 +155,7 @@ func TestNewScrobble_LocalTime(t *testing.T) {
 	raw := json.RawMessage(`{}`)
 	uts := int64(1704556800) // 2024-01-06T16:00:00Z
 
-	scrobble := NewScrobble("alice", "Artist", "Track", "Album", uts, nil, raw)
+	scrobble := NewScrobble("alice", "Artist", "Track", "Album", uts, nil, raw, nil)
 
 	expectedLocalTime := "2024-01-06T16:00:00Z"
 	if scrobble.LocalTime != expectedLocalTime {
@@ -168,7 +168,7 @@ func TestScrobble_MarshalJSON_LocalTime(t *testing.T) {
 	raw := json.RawMessage(`{}`)
 	uts := int64(1704556800)
 
-	scrobble := NewScrobble("alice", "Artist", "Track", "Album", uts, nil, raw)
+	scrobble := NewScrobble("alice", "Artist", "Track", "Album", uts, nil, raw, nil)
 
 	data, err := json.Marshal(scrobble)
 	if err != nil {
@@ -210,7 +210,7 @@ func TestNewScrobble_WithNormalization(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			raw := json.RawMessage(`{}`)
-			scrobble := NewScrobble("user", "Queen", tt.track, "Album", 123456789, nil, raw)
+			scrobble := NewScrobble("user", "Queen", tt.track, "Album", 123456789, nil, raw, nil)
 
 			if scrobble.Track != tt.track {
 				t.Errorf("Track = %q, want %q", scrobble.Track, tt.track)
@@ -225,7 +225,7 @@ func TestNewScrobble_WithNormalization(t *testing.T) {
 // TestScrobble_JSONMarshalWithNormalization tests that normalized_title is included in JSON output
 func TestScrobble_JSONMarshalWithNormalization(t *testing.T) {
 	raw := json.RawMessage(`{"test":"data"}`)
-	scrobble := NewScrobble("alice", "Queen", "Song - Remastered 2011", "Greatest Hits", 123456789, nil, raw)
+	scrobble := NewScrobble("alice", "Queen", "Song - Remastered 2011", "Greatest Hits", 123456789, nil, raw, nil)
 
 	data, err := json.Marshal(scrobble)
 	if err != nil {
@@ -262,7 +262,7 @@ func TestNormalization_Disabled(t *testing.T) {
 
 	raw := json.RawMessage(`{}`)
 	track := "Song - Remastered 2011"
-	scrobble := NewScrobble("user", "Artist", track, "Album", 123456789, nil, raw)
+	scrobble := NewScrobble("user", "Artist", track, "Album", 123456789, nil, raw, nil)
 
 	// When disabled, normalized_title should equal original track
 	if scrobble.NormalizedTitle != track {

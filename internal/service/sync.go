@@ -18,6 +18,7 @@ type SyncService struct {
 	username string
 	from     int64 // Unix timestamp; lower bound (inclusive)
 	to       int64 // Unix timestamp; upper bound (inclusive)
+	useSince bool  // If true, 'from' was explicitly set and should override watermark
 	pageSize int
 	maxPages int
 	dryRun   bool
@@ -32,6 +33,7 @@ type SyncService struct {
 func NewSyncService(
 	username string,
 	from, to int64,
+	useSince bool,
 	pageSize, maxPages int,
 	dryRun bool,
 	client *lastfm.Client,
@@ -44,6 +46,7 @@ func NewSyncService(
 		username: username,
 		from:     from,
 		to:       to,
+		useSince: useSince,
 		pageSize: pageSize,
 		maxPages: maxPages,
 		dryRun:   dryRun,
@@ -67,9 +70,17 @@ func (s *SyncService) Sync(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("get watermark: %w", err)
 	}
 
-	// Effective lower bound: max(--since, watermark)
+	// Determine effective lower bound
+	// If --since was explicitly set, use it; otherwise use watermark
 	lowerBound := s.from
-	if exists && existingWatermark > lowerBound {
+	if s.useSince {
+		// Explicit --since overrides watermark
+		s.logger.Info("using_explicit_since", zap.Int64("since", s.from))
+		if exists {
+			s.logger.Info("watermark.ignored", zap.Int64("watermark", existingWatermark), zap.String("reason", "explicit --since provided"))
+		}
+	} else if exists && existingWatermark > lowerBound {
+		// Use watermark if no explicit --since and watermark is newer
 		lowerBound = existingWatermark
 		s.logger.Info("watermark.loaded", zap.Int64("watermark", existingWatermark))
 	}
@@ -201,6 +212,7 @@ func (s *SyncService) Sync(ctx context.Context) (int, error) {
 				uts,
 				mbid,
 				track.Raw,
+				s.logger,
 			)
 			scrobbles = append(scrobbles, *scrobble)
 

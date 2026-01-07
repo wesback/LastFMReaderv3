@@ -257,14 +257,15 @@ lastfm-sync fetch --user alice --output azure --azure-container test --dry-run
 Each line is a JSON object representing one scrobble:
 
 ```json
-{"username":"alice","artist":"Radiohead","track":"Paranoid Android","album":"OK Computer","uts":1704067200,"local_time":"2024-01-01T00:00:00Z","mbid":"abc123","source":"lastfm","ingested_at":"2024-01-06T14:30:22Z","raw":{}}
-{"username":"alice","artist":"The Beatles","track":"Come Together","album":"Abbey Road","uts":1704070800,"local_time":"2024-01-01T01:00:00Z","source":"lastfm","ingested_at":"2024-01-06T14:30:22Z","raw":{}}
+{"username":"alice","artist":"Radiohead","track":"Paranoid Android","normalized_title":"Paranoid Android","album":"OK Computer","uts":1704067200,"local_time":"2024-01-01T00:00:00Z","mbid":"abc123","source":"lastfm","ingested_at":"2024-01-06T14:30:22Z","raw":{}}
+{"username":"alice","artist":"The Beatles","track":"Come Together - Remastered","normalized_title":"Come Together","album":"Abbey Road","uts":1704070800,"local_time":"2024-01-01T01:00:00Z","source":"lastfm","ingested_at":"2024-01-06T14:30:22Z","raw":{}}
 ```
 
 **Fields:**
 - `username` (string): Last.fm username
 - `artist` (string): Artist name
-- `track` (string): Track name
+- `track` (string): Track name (original from Last.fm, may include annotations)
+- `normalized_title` (string): Clean track title with annotations removed (Live, Remastered, featuring, etc.)
 - `album` (string): Album name
 - `uts` (int64): Unix timestamp (seconds since epoch)
 - `local_time` (string): Human-readable UTC timestamp in RFC3339 format (derived from uts)

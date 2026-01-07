@@ -22,8 +22,8 @@ import (
 	"github.com/lastfm-reader/lastfm-sync/internal/writer"
 )
 
-// TestSyncWithLastFm tests full sync pipeline integration with Last.fm API
-func TestSyncWithLastFm(t *testing.T) {
+// TestProgressBarWithLastFmSync tests progress bar integration with Last.fm sync
+func TestProgressBarWithLastFmSync(t *testing.T) {
 	// Create mock Last.fm API server
 	pageSize := 50
 	totalPages := 3
@@ -217,8 +217,8 @@ func TestSyncWithLastFm(t *testing.T) {
 	}
 }
 
-// TestSyncProgressBarDisabled tests that sync works with progress bar disabled
-func TestSyncProgressBarDisabled(t *testing.T) {
+// TestProgressBarDisabled tests that progress bar can be disabled
+func TestProgressBarDisabled(t *testing.T) {
 	// Create configuration with progress disabled
 	cfg := &config.Config{
 		Progress: config.ProgressConfig{
@@ -240,8 +240,8 @@ func TestSyncProgressBarDisabled(t *testing.T) {
 	}
 }
 
-// TestSyncErrorHandling tests sync behavior when API returns errors
-func TestSyncErrorHandling(t *testing.T) {
+// TestProgressBarErrorHandling tests progress bar with sync errors
+func TestProgressBarErrorHandling(t *testing.T) {
 	// Create mock server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -315,8 +315,8 @@ func TestSyncErrorHandling(t *testing.T) {
 	}
 }
 
-// TestSyncCancellation tests sync behavior when context is cancelled
-func TestSyncCancellation(t *testing.T) {
+// TestProgressBarCancellation tests progress bar with context cancellation
+func TestProgressBarCancellation(t *testing.T) {
 	// Create mock server with delay
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second) // Delay to allow cancellation

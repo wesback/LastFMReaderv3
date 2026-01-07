@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/lastfm-reader/lastfm-sync/internal/logging"
 	"github.com/lastfm-reader/lastfm-sync/internal/normalize"
 	"go.uber.org/zap"
 )
@@ -37,22 +36,18 @@ func formatTimestamp(uts int64) string {
 
 // NewScrobble creates a Scrobble from API fields with current ingested_at timestamp.
 // raw should be the original Last.fm API response object.
-// If a logger is available globally, DEBUG logs normalization changes.
-func NewScrobble(username, artist, track, album string, uts int64, mbid *string, raw json.RawMessage) *Scrobble {
+// If logger is provided and level is debug, logs normalization changes.
+func NewScrobble(username, artist, track, album string, uts int64, mbid *string, raw json.RawMessage, logger *zap.Logger) *Scrobble {
 	normalizedTitle := normalize.NormalizeTitle(track)
 
-	// Log when title is changed by normalization
-	if normalizedTitle != track {
-		// Try to get logger, but don't fail if not available
-		logger, err := logging.New("debug")
-		if err == nil {
-			logger.Debug("title normalized",
-				zap.String("original", track),
-				zap.String("normalized", normalizedTitle),
-				zap.String("artist", artist),
-				zap.String("username", username),
-			)
-		}
+	// Log when title is changed by normalization (only if logger provided)
+	if logger != nil && normalizedTitle != track {
+		logger.Debug("title normalized",
+			zap.String("original", track),
+			zap.String("normalized", normalizedTitle),
+			zap.String("artist", artist),
+			zap.String("username", username),
+		)
 	}
 
 	return &Scrobble{
