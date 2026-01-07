@@ -55,11 +55,15 @@ func NewRealProgressBar(total int64, desc string, opts ...Option) *ProgressBar {
 	barOpts := []progressbar.Option{
 		progressbar.OptionSetDescription(desc),
 		progressbar.OptionSetWriter(options.Writer),
-		progressbar.OptionSetWidth(options.Width),
 		progressbar.OptionThrottle(options.RefreshRate),
 		progressbar.OptionShowCount(),
 		progressbar.OptionSetPredictTime(options.ShowETA),
 		progressbar.OptionSetElapsedTime(options.ShowElapsed),
+	}
+
+	// Only set width if explicitly specified (0 means auto-detect, don't pass to library)
+	if options.Width > 0 {
+		barOpts = append(barOpts, progressbar.OptionSetWidth(options.Width))
 	}
 
 	if options.ShowSpeed {
