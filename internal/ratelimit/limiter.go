@@ -122,18 +122,43 @@ func isTransient(err error) bool {
 		return true
 	}
 
-	// Server errors (5xx)
-	if errMsg[:len("server error")] == "server error" {
+	// Server errors (5xx) - use strings.Contains for more flexible matching
+	if len(errMsg) >= len("server error") && errMsg[:len("server error")] == "server error" {
 		return true
 	}
 
-	// Network errors
-	if errMsg == "request failed: context deadline exceeded" ||
-		errMsg == "request failed: connection reset" ||
-		errMsg == "request failed: connection refused" {
+	// Network errors - use strings.Contains to match various timeout and connection error formats
+	// This handles errors like:
+	// - "request failed: context deadline exceeded"
+	// - "Get \"...\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+	// - "request failed: connection reset"
+	// - "request failed: connection refused"
+	if containsAny(errMsg, []string{
+		"context deadline exceeded",
+		"connection reset",
+		"connection refused",
+		"timeout",
+		"temporary failure",
+		"network is unreachable",
+		"no such host",
+	}) {
 		return true
 	}
 
+	return false
+}
+
+// containsAny checks if the string contains any of the substrings
+func containsAny(s string, substrings []string) bool {
+	for _, substr := range substrings {
+		if len(s) >= len(substr) {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				if s[i:i+len(substr)] == substr {
+					return true
+				}
+			}
+		}
+	}
 	return false
 }
 

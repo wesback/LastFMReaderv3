@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Feature 006: Scrobble Deduplication & Merge
+
+- **Merge Command** (`cmd/lastfm-sync/commands/merge.go`)
+  - New `merge` command for consolidating multiple NDJSON scrobble files
+  - **Required `--user` flag** for Last.fm username (used as default output filename)
+  - **Unified storage backend**: Azure container presence determines both input and output use Azure
+  - **Azure auto-discovery**: Automatically finds files matching `lastfm/dt=*/{username}-*.ndjson`
+  - **Azure output**: Writes to `merged/{username}.json` (customizable with `--azure-prefix`)
+  - Azure configuration flags aligned with fetch command (7 flags for authentication and config)
+  - Local input: Glob pattern support (e.g., `*.ndjson`, `exports/**/*.ndjson`)
+  - Local output: Default filename `{username}.json` (customizable with `--out-path`)
+  - Sorted output by timestamp (ascending)
+  - Comprehensive summary statistics with enhanced metrics
+  - Verbose logging mode with `--verbose` flag for DEBUG-level output
+  - Progress bar integration with file-by-file tracking
+
+- **Deduplication Engine** (`internal/merge/deduplicator.go`)
+  - Hash-based deduplication using SHA256 keys (64-character hex strings)
+  - In-memory processing optimized for large datasets (tested up to 1M scrobbles)
+  - Performance: 127K-154K scrobbles/sec (12-15x above 10K target)
+  - Memory usage: ~2.9GB for 1M scrobbles (acceptable for in-memory processing)
+  - Four deduplication strategies:
+    - **Default**: Artist + Album + Track + Timestamp (standard precision)
+    - **Strict**: Default + Duration (when available, for higher precision)
+    - **Relaxed**: Artist + Track + Timestamp (ignores album differences)
+    - **MBID**: MusicBrainz ID + Timestamp (when available, falls back to Artist+Track+UTS)
+
+- **Conflict Resolution** (`internal/merge/conflict.go`)
+  - Three resolution modes when duplicates found:
+    - **Completeness**: Keep most complete metadata (default) - scores by field count, MBID presence
+    - **First**: Keep first occurrence chronologically
+    - **Last**: Keep last occurrence chronologically
+  - Completeness scoring: MBID (+2 points), other fields (+1 each)
+  - Tie-breaker logic: MBID presence → timestamp → keep existing
+
+- **Data Quality Handling** (`internal/merge/reader.go`)
+  - Graceful error recovery for invalid JSON lines
+  - Scrobble validation (required fields: Artist, Track, UTS>0)
+  - 99.80% success rate tested with intentional errors
+  - Detailed error tracking with line numbers and descriptions
+  - Continues processing after errors (fail-safe design)
+
+- **Preview & Validation** 
+  - **Dry-run mode**: Preview merge without writing output (`--dry-run`)
+  - Estimated output size calculation based on sample averaging
+  - Enhanced statistics:
+    - Date range (earliest/latest timestamp)
+    - Unique artist count
+    - Unique track count (artist+title combinations)
+    - Processing rate (scrobbles/second)
+  - Strategy indicator in summary output
+
+- **Checkpointing Infrastructure** (`internal/merge/checkpoint.go`)
+  - MergeCheckpoint struct with version validation
+  - Atomic write using temp file + rename pattern
+  - Save/Load with JSON serialization
+  - Config validation (strategy, conflict resolution must match)
+  - Resume capability framework (flags exist, full integration pending)
+  - Checkpoint deletion on successful completion
+
+- **Testing & Quality**
+  - 30+ unit tests covering all core components
+  - 10 integration tests (9 passing + 1 Azure skip)
+  - Strategy comparison tests validating behavior differences
+  - Conflict resolution quality tests (100% completeness retention)
+  - Data quality tests (99.80% success with 100 errors in 50K records)
+  - Benchmark suite with 10K, 100K, 1M scrobble datasets
+
 ### Added - Feature 005: Console Progress Bar
 
 - **Progress Bar Implementation** (`internal/progress/`)

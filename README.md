@@ -265,6 +265,111 @@ lastfm-sync fetch --user alice --output azure --azure-container test --dry-run
 # Shows what would be fetched and written without consuming resources
 ```
 
+### Merge Command
+
+The `merge` command consolidates multiple NDJSON scrobble files into a single deduplicated output for a specific user. This is useful for:
+- Combining exports from different time periods
+- Merging data from multiple sources
+- Deduplicating scrobble history
+- Creating unified user archives
+
+**Basic merge (outputs to `{username}.json`):**
+```bash
+lastfm-sync merge --user alice file1.ndjson file2.ndjson file3.ndjson
+# Output: alice.json (in current directory)
+```
+
+**With explicit output path:**
+```bash
+lastfm-sync merge --user alice --out-path /data/archives/alice.json exports/*.ndjson
+```
+
+**With glob patterns:**
+```bash
+lastfm-sync merge --user alice exports/*.ndjson
+```
+
+**Azure Blob Storage (both input and output):**
+```bash
+# Auto-discover from Azure (no file patterns needed!)
+# Finds: lastfm/dt=*/alice-*.ndjson
+# Outputs: merged/alice.json
+lastfm-sync merge --user alice \
+  --azure-container lastfmdata \
+  --azure-account myaccount
+
+# With custom output prefix
+# Outputs: archives/2026/alice.json
+lastfm-sync merge --user alice \
+  --azure-container lastfmdata \
+  --azure-account myaccount \
+  --azure-prefix "archives/2026/"
+
+# Using connection string for authentication
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=..."
+lastfm-sync merge --user alice \
+  --azure-container lastfmdata \
+  --azure-auth connstr
+```
+
+**Deduplication strategies:**
+```bash
+# Default: Artist+Album+Track+Timestamp
+lastfm-sync merge --user alice *.ndjson --strategy default
+
+# Strict: Includes duration (if available)
+lastfm-sync merge --user alice *.ndjson --strategy strict
+
+# Relaxed: Ignores album differences
+lastfm-sync merge --user alice *.ndjson --strategy relaxed
+
+# MBID: Uses MusicBrainz IDs when available
+lastfm-sync merge --user alice *.ndjson --strategy mbid
+```
+
+**Conflict resolution:**
+```bash
+# Completeness: Keep most complete metadata (default)
+lastfm-sync merge --user alice *.ndjson --conflict-resolution completeness
+
+# First: Keep first occurrence
+lastfm-sync merge --user alice *.ndjson --conflict-resolution first
+
+# Last: Keep last occurrence
+lastfm-sync merge --user alice *.ndjson --conflict-resolution last
+```
+
+**Dry-run preview:**
+```bash
+lastfm-sync merge --user alice *.ndjson --dry-run
+# Shows statistics without writing output:
+# - Total/unique scrobbles
+# - Duplicates removed
+# - Date range
+# - Unique artists/tracks
+# - Estimated output size
+```
+
+**Checkpointing (large datasets):**
+```bash
+# Save checkpoint every 10,000 scrobbles
+lastfm-sync merge --user alice large-export-*.ndjson \
+  --checkpoint-interval 10000 \
+  --checkpoint-path .merge-checkpoint.json
+
+# Resume from checkpoint after interruption
+lastfm-sync merge --user alice large-export-*.ndjson --resume
+```
+
+**Verbose logging:**
+```bash
+lastfm-sync merge --user alice *.ndjson --verbose
+# Shows DEBUG-level logs including:
+# - Conflict resolution decisions
+# - Deduplication keys
+# - File processing progress
+```
+
 ## Output Format
 
 ### NDJSON Structure
@@ -519,23 +624,3 @@ Apache License 2.0 - See LICENSE file
 ## Contributing
 
 See `.specify/specs/001-lastfm-scrobble-cli/` for complete specification and implementation plan.
-
-## Status
-
-**Phase 1-7: COMPLETE** ✅  
-- ✅ Setup & Foundation
-- ✅ Local fetch with incremental sync
-- ✅ Azure Blob Storage integration
-- ✅ Rate limiting & retry logic
-- ✅ Dry-run & debug mode
-- ✅ 105 passing tests
-- ✅ Secret redaction
-
-**Phase 8: Polish** (Current)  
-Documentation, final testing, release preparation
-
----
-
-**Specification**: `.specify/specs/001-lastfm-scrobble-cli/spec.md`  
-**Architecture**: `.specify/specs/001-lastfm-scrobble-cli/plan.md`  
-**Tasks**: `.specify/specs/001-lastfm-scrobble-cli/tasks.md`

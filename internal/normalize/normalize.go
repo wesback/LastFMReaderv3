@@ -33,7 +33,30 @@ func IsEnabled() bool {
 	return enabled.Load()
 }
 
-// NormalizeTitle removes common annotations from track titles.
+// ToTitleCase converts a string to title case (capitalizing first letter of each word).
+// Preserves existing capitalization patterns within words (e.g., "McCartney" stays "McCartney").
+func ToTitleCase(s string) string {
+	if s == "" {
+		return s
+	}
+
+	// Split into words
+	words := strings.Fields(s)
+	for i, word := range words {
+		if len(word) > 0 {
+			// Capitalize first letter, keep rest as-is to preserve existing patterns
+			runes := []rune(word)
+			if len(runes) > 0 {
+				upperFirst := strings.ToUpper(string(runes[0]))
+				words[i] = upperFirst + string(runes[1:])
+			}
+		}
+	}
+
+	return strings.Join(words, " ")
+}
+
+// NormalizeTitle removes common annotations from track titles and converts to title case.
 // Returns the original title if:
 //   - Normalization is disabled (feature flag)
 //   - Input is empty
@@ -46,6 +69,7 @@ func IsEnabled() bool {
 //  4. Date/year markers
 //  5. Remix labels
 //  6. Featuring/collaboration markers (lowest priority)
+//  7. Title case conversion (final step)
 //
 // Thread-safe and performant for concurrent use.
 //
@@ -54,6 +78,7 @@ func IsEnabled() bool {
 //	"Bohemian Rhapsody - Remastered 2011" → "Bohemian Rhapsody"
 //	"Song - Live at Venue" → "Song"
 //	"Track (feat. Artist)" → "Track"
+//	"vamos a la playa" → "Vamos A La Playa"
 //	"Live" → "Live" (preserved - too short)
 //	"" → "" (preserved)
 func NormalizeTitle(title string) string {
@@ -81,6 +106,7 @@ func NormalizeTitle(title string) string {
 		{"remaster", RemasterPattern},
 		{"live", LivePattern},
 		{"version", VersionPattern},
+		{"source", SourcePattern},
 		{"date", DatePattern},
 		{"remix", RemixPattern},
 		{"featuring", FeaturingPattern},
@@ -109,6 +135,9 @@ func NormalizeTitle(title string) string {
 	if len(normalized) < minLength {
 		return title
 	}
+
+	// Convert to title case
+	normalized = ToTitleCase(normalized)
 
 	return normalized
 }
