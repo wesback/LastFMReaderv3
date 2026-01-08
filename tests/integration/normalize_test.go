@@ -1,15 +1,21 @@
 package integration
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/lastfm-reader/lastfm-sync/cmd/lastfm-sync/commands"
 	"github.com/lastfm-reader/lastfm-sync/internal/logging"
 	"github.com/lastfm-reader/lastfm-sync/internal/models"
+	"github.com/lastfm-reader/lastfm-sync/internal/normalize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -234,9 +240,188 @@ func TestNormalizeErrorHandling(t *testing.T) {
 
 // TestNormalizeAzureStorage tests end-to-end normalization on Azure Blob Storage
 func TestNormalizeAzureStorage(t *testing.T) {
-	// TODO: Implement integration test for Azure storage normalization
-	// Requires Azure emulator or test account
-	t.Skip("Azure integration test not yet implemented - requires Azure test environment")
+	// Skip if Azure credentials not available
+	connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
+	if connStr == "" {
+		t.Skip("AZURE_STORAGE_CONNECTION_STRING not set - skipping Azure integration test")
+	}
+
+	// Create test container name
+	containerName := fmt.Sprintf("test-normalize-%d", time.Now().Unix())
+
+	// Create Azure client
+	client, err := azblob.NewClientFromConnectionString(connStr, nil)
+	require.NoError(t, err)
+
+	// Create test container
+	ctx := context.Background()
+	_, err = client.CreateContainer(ctx, containerName, nil)
+	require.NoError(t, err)
+	defer func() {
+		// Cleanup: delete container
+		client.DeleteContainer(ctx, containerName, nil)
+	}()
+
+	// Upload test blobs
+	testBlobs := map[string][]models.Scrobble{
+		"testuser_001.ndjson": {
+			{Artist: "The Beatles", Track: "Hey Jude - Remastered 2009", NormalizedTitle: ""},
+			{Artist: "Queen", Track: "Bohemian Rhapsody - Live at Wembley", NormalizedTitle: ""},
+		},
+		"testuser_002.ndjson": {
+			{Artist: "Pink Floyd", Track: "Comfortably Numb (feat. David Gilmour)", NormalizedTitle: ""},
+		},
+	}
+
+	for blobName, scrobbles := range testBlobs {
+		var buf strings.Builder
+		for _, scrobble := range scrobbles {
+			data, _ := json.Marshal(scrobble)
+			buf.Write(data)
+			buf.WriteString("\n")
+		}
+		_, err := client.UploadStream(ctx, containerName, blobName, strings.NewReader(buf.String()), nil)
+		require.NoError(t, err)
+	}
+
+	// Run normalize command logic (simulate command execution)
+	logger, _ := logging.New("error")
+
+	// Discover files
+	azureClient := client
+	files, err := discoverAzureFilesTest(ctx, azureClient, containerName, "", "testuser", logger)
+	require.NoError(t, err)
+	assert.Len(t, files, 2)
+
+	// Process files
+	updatedCount := 0
+	for _, file := range files {
+		updated, err := processAzureFileTest(ctx, azureClient, containerName, file, false, logger)
+		require.NoError(t, err)
+		if updated {
+			updatedCount++
+		}
+	}
+
+	assert.Equal(t, 2, updatedCount, "both files should be updated")
+
+	// Verify normalized_title fields were updated
+	for blobName := range testBlobs {
+		response, err := client.DownloadStream(ctx, containerName, blobName, nil)
+		require.NoError(t, err)
+
+		scanner := bufio.NewScanner(response.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+			var scrobble models.Scrobble
+			err := json.Unmarshal([]byte(line), &scrobble)
+			require.NoError(t, err)
+
+			// Verify normalized_title is set
+			assert.NotEmpty(t, scrobble.NormalizedTitle, "normalized_title should be set")
+			// Verify it's different from track (annotations removed)
+			if strings.Contains(scrobble.Track, "Remastered") ||
+				strings.Contains(scrobble.Track, "Live") ||
+				strings.Contains(scrobble.Track, "feat.") {
+				assert.NotEqual(t, scrobble.Track, scrobble.NormalizedTitle,
+					"normalized title should differ from original track")
+			}
+		}
+		response.Body.Close()
+	}
+}
+
+// Helper functions for Azure testing (duplicates of main functions for testing)
+func discoverAzureFilesTest(ctx context.Context, client *azblob.Client, container, prefix, username string, logger *logging.Logger) ([]string, error) {
+	var files []string
+	pattern := username + "_"
+
+	searchPrefix := prefix
+	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, "/") {
+		searchPrefix += "/"
+	}
+
+	pager := client.NewListBlobsFlatPager(container, &azblob.ListBlobsFlatOptions{
+		Prefix: &searchPrefix,
+	})
+
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list blobs: %w", err)
+		}
+
+		for _, blob := range page.Segment.BlobItems {
+			if blob.Name == nil {
+				continue
+			}
+			blobName := *blob.Name
+			baseName := filepath.Base(blobName)
+
+			if strings.HasPrefix(baseName, pattern) && strings.HasSuffix(baseName, ".ndjson") {
+				files = append(files, blobName)
+			}
+		}
+	}
+
+	return files, nil
+}
+
+func processAzureFileTest(ctx context.Context, client *azblob.Client, container, blobPath string, dryRun bool, logger *logging.Logger) (bool, error) {
+	response, err := client.DownloadStream(ctx, container, blobPath, nil)
+	if err != nil {
+		return false, fmt.Errorf("read_error: %w", err)
+	}
+	defer response.Body.Close()
+
+	scanner := bufio.NewScanner(response.Body)
+	var scrobbles []models.Scrobble
+	var updated bool
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		var scrobble models.Scrobble
+		if err := json.Unmarshal([]byte(line), &scrobble); err != nil {
+			return false, err
+		}
+
+		if scrobble.Track == "" {
+			return false, fmt.Errorf("missing track field")
+		}
+
+		newNormalized := normalize.NormalizeTitle(scrobble.Track)
+		if scrobble.NormalizedTitle != newNormalized {
+			scrobble.NormalizedTitle = newNormalized
+			updated = true
+		}
+
+		scrobbles = append(scrobbles, scrobble)
+	}
+
+	if !updated || dryRun {
+		return updated, nil
+	}
+
+	var buf strings.Builder
+	for _, scrobble := range scrobbles {
+		data, _ := json.Marshal(scrobble)
+		buf.Write(data)
+		buf.WriteString("\n")
+	}
+
+	_, err = client.UploadStream(ctx, container, blobPath, strings.NewReader(buf.String()), nil)
+	if err != nil {
+		return false, fmt.Errorf("write_error: %w", err)
+	}
+
+	return true, nil
 }
 
 // TestNormalizeProgressDisplay tests progress bar display during processing

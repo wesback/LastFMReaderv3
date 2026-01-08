@@ -262,15 +262,15 @@ func BenchmarkNormalizeCommand(b *testing.B) {
 
 ## Definition of Done
 
-- [X] All functional requirements (FR-001 through FR-020) implemented (except Azure FR-005, FR-006 deferred)
+- [X] All functional requirements (FR-001 through FR-020) implemented including Azure (FR-005, FR-006)
 - [X] All success criteria (SC-001 through SC-006) verified
 - [X] Unit test coverage ≥ 80% (85%+ on critical functions)
-- [X] Integration tests for all user stories pass (4/4 passing, Azure deferred)
+- [X] Integration tests for all user stories pass (4/4 passing, Azure test added - conditional on credentials)
 - [ ] Performance benchmark meets 5 sec per 1000 files target (deferred - optional)
 - [X] Linting passes (golint, go vet)
 - [ ] Code review approved (pending PR)
 - [X] Documentation updated (README, troubleshooting, test summary)
-- [ ] Manual testing on Linux, macOS, Windows (Linux complete, others pending)
+- [ ] Manual testing on Linux, macOS, Windows (Linux complete, Azure pending real credentials, others pending)
 
 ---
 

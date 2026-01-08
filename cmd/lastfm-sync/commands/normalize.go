@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/lastfm-reader/lastfm-sync/internal/config"
 	"github.com/lastfm-reader/lastfm-sync/internal/logging"
 	"github.com/lastfm-reader/lastfm-sync/internal/models"
 	"github.com/lastfm-reader/lastfm-sync/internal/normalize"
@@ -45,9 +47,16 @@ type ProcessingSummary struct {
 // NormalizeCommand returns the "normalize" cobra command
 func NormalizeCommand() *cobra.Command {
 	var (
-		username string
-		dryRun   bool
-		logLevel string
+		username          string
+		dryRun            bool
+		logLevel          string
+		azureContainer    string
+		azureAccount      string
+		azureAuth         string
+		azurePrefix       string
+		azureContainerURL string
+		azureAccountKey   string
+		azureSASToken     string
 	)
 
 	cmd := &cobra.Command{
@@ -61,10 +70,19 @@ retroactively apply them to historical data without re-fetching from Last.fm.
 
 STORAGE MODES:
   - Local: Processes files in local filesystem (default)
+  - Azure: Processes files in Azure Blob Storage
 
 FILE DISCOVERY:
   Matches files with pattern: {username}_*.ndjson
   - Local: Searches in current directory or configured base path
+  - Azure: Searches with prefix filter in specified container
+
+AZURE AUTHENTICATION:
+  - default: DefaultAzureCredential (recommended for Azure VMs/AKS)
+  - mi: Managed Identity
+  - connstr: Connection string from AZURE_STORAGE_CONNECTION_STRING env var
+  - key: Storage account key (use --azure-account-key)
+  - sas: SAS token (use --azure-sas-token with query string format: sv=...&sig=...)
 
 PROCESSING:
   - Reads each file line-by-line (NDJSON format)
@@ -82,6 +100,20 @@ Examples:
 
   # Dry-run preview (local storage)
   lastfm-sync normalize --user john_doe --dry-run
+
+  # Azure Blob Storage with DefaultAzureCredential
+  lastfm-sync normalize --user john_doe \
+    --azure-container scrobbles --azure-account myaccount --azure-auth default
+
+  # Azure with connection string
+  export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=..."
+  lastfm-sync normalize --user john_doe \
+    --azure-container scrobbles --azure-auth connstr
+
+  # Azure with custom prefix
+  lastfm-sync normalize --user john_doe \
+    --azure-container scrobbles --azure-account myaccount \
+    --azure-prefix "archives/2026/"
 
   # Debug logging
   lastfm-sync normalize --user john_doe --log-level debug
@@ -106,17 +138,45 @@ Notes:
 				return fmt.Errorf("--user is required")
 			}
 
+			// Determine storage mode
+			storageMode := "local"
+			if azureContainer != "" {
+				storageMode = "azure"
+			}
+
 			logger.Info("Starting normalize operation",
 				zap.String("username", username),
-				zap.String("storage", "local"),
+				zap.String("storage", storageMode),
 				zap.Bool("dry_run", dryRun),
 			)
 
-			// Discover files
-			logger.Info("Discovering files", zap.String("pattern", username+"_*.ndjson"))
-			files, err := DiscoverLocalFiles(username, logger)
-			if err != nil {
-				return fmt.Errorf("failed to discover files: %w", err)
+			var files []string
+			if storageMode == "azure" {
+				// Azure storage - discover files via ListBlobs
+				logger.Info("Discovering Azure blobs",
+					zap.String("container", azureContainer),
+					zap.String("prefix", azurePrefix),
+					zap.String("pattern", username+"_*.ndjson"))
+
+				// Create Azure client
+				azureClient, err := createAzureClient(azureContainer, azureAccount, azureAuth,
+					azureContainerURL, azureAccountKey, azureSASToken)
+				if err != nil {
+					return fmt.Errorf("failed to create Azure client: %w", err)
+				}
+
+				files, err = discoverAzureFiles(ctx, azureClient, azureContainer, azurePrefix, username, logger)
+				if err != nil {
+					return fmt.Errorf("failed to discover Azure files: %w", err)
+				}
+			} else {
+				// Local storage - discover files via glob
+				logger.Info("Discovering files", zap.String("pattern", username+"_*.ndjson"))
+				var err error
+				files, err = DiscoverLocalFiles(username, logger)
+				if err != nil {
+					return fmt.Errorf("failed to discover files: %w", err)
+				}
 			}
 
 			if len(files) == 0 {
@@ -127,7 +187,7 @@ Notes:
 
 			logger.Info("Found files", zap.Int("count", len(files)))
 			fmt.Printf("\nProcessing files for user: %s\n", username)
-			fmt.Printf("Storage: local\n\n")
+			fmt.Printf("Storage: %s\n\n", storageMode)
 
 			// Process files
 			startTime := time.Now()
@@ -139,7 +199,17 @@ Notes:
 			for i, filePath := range files {
 				fmt.Printf("Processing: %s [%d/%d]\n", filepath.Base(filePath), i+1, len(files))
 
-				updated, err := ProcessFile(ctx, filePath, dryRun, logger)
+				var updated bool
+				var err error
+
+				if storageMode == "azure" {
+					azureClient, _ := createAzureClient(azureContainer, azureAccount, azureAuth,
+						azureContainerURL, azureAccountKey, azureSASToken)
+					updated, err = processAzureFile(ctx, azureClient, azureContainer, filePath, dryRun, logger)
+				} else {
+					updated, err = ProcessFile(ctx, filePath, dryRun, logger)
+				}
+
 				if err != nil {
 					logger.Error("Failed to process file",
 						zap.String("file", filePath),
@@ -182,7 +252,163 @@ Notes:
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without writing")
 	cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level: debug, info, warn, error")
 
+	// Azure Blob Storage options
+	cmd.Flags().StringVar(&azureContainer, "azure-container", "", "Azure container name (enables Azure mode)")
+	cmd.Flags().StringVar(&azureAccount, "azure-account", "", "Azure storage account name")
+	cmd.Flags().StringVar(&azureAuth, "azure-auth", "default", "Azure auth method: default, mi, connstr, key, sas")
+	cmd.Flags().StringVar(&azurePrefix, "azure-prefix", "", "Azure blob prefix")
+	cmd.Flags().StringVar(&azureContainerURL, "azure-container-url", "", "Azure container URL")
+	cmd.Flags().StringVar(&azureAccountKey, "azure-account-key", "", "Azure storage account key")
+	cmd.Flags().StringVar(&azureSASToken, "azure-sas-token", "", "Azure SAS token")
+
 	return cmd
+}
+
+// createAzureClient creates an Azure Blob Storage client based on auth method
+func createAzureClient(container, account, authMethod, containerURL, accountKey, sasToken string) (*azblob.Client, error) {
+	cfg := &config.Config{
+		AzureContainer:  container,
+		AzureAccount:    account,
+		AzureAuth:       authMethod,
+		AzureAccountURL: "",
+		AzureAccountKey: accountKey,
+		AzureSASToken:   sasToken,
+	}
+
+	// Build account URL if not using connection string
+	if authMethod != "connstr" && account != "" {
+		cfg.AzureAccountURL = fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+	}
+
+	// For container URL-based auth
+	if containerURL != "" {
+		cfg.AzureAccountURL = containerURL
+	}
+
+	return config.CreateAzureBlobClient(cfg)
+}
+
+// discoverAzureFiles lists blobs matching the username pattern in Azure Blob Storage
+func discoverAzureFiles(ctx context.Context, client *azblob.Client, container, prefix, username string, logger *logging.Logger) ([]string, error) {
+	var files []string
+	pattern := username + "_"
+
+	// Build prefix filter
+	searchPrefix := prefix
+	if searchPrefix != "" && !strings.HasSuffix(searchPrefix, "/") {
+		searchPrefix += "/"
+	}
+
+	// List blobs with prefix
+	pager := client.NewListBlobsFlatPager(container, &azblob.ListBlobsFlatOptions{
+		Prefix: &searchPrefix,
+	})
+
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list blobs: %w", err)
+		}
+
+		for _, blob := range page.Segment.BlobItems {
+			if blob.Name == nil {
+				continue
+			}
+			blobName := *blob.Name
+			baseName := filepath.Base(blobName)
+
+			// Check if it matches the pattern {username}_*.ndjson
+			if strings.HasPrefix(baseName, pattern) && strings.HasSuffix(baseName, ".ndjson") {
+				files = append(files, blobName)
+			}
+		}
+	}
+
+	return files, nil
+}
+
+// processAzureFile processes a single Azure blob file
+func processAzureFile(ctx context.Context, client *azblob.Client, container, blobPath string, dryRun bool, logger *logging.Logger) (bool, error) {
+	// Download blob
+	response, err := client.DownloadStream(ctx, container, blobPath, nil)
+	if err != nil {
+		return false, fmt.Errorf("read_error: download blob: %w", err)
+	}
+	defer response.Body.Close()
+
+	// Parse NDJSON line by line
+	scanner := bufio.NewScanner(response.Body)
+	var scrobbles []models.Scrobble
+	var updated bool
+	lineNum := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		var scrobble models.Scrobble
+		if err := json.Unmarshal([]byte(line), &scrobble); err != nil {
+			return false, fmt.Errorf("parse_error at line %d: %w", lineNum, err)
+		}
+
+		// Check if track field exists
+		if scrobble.Track == "" {
+			return false, fmt.Errorf("missing_track_field at line %d", lineNum)
+		}
+
+		// Apply normalization
+		newNormalized := normalize.NormalizeTitle(scrobble.Track)
+
+		// Check if normalized_title changed
+		if scrobble.NormalizedTitle != newNormalized {
+			scrobble.NormalizedTitle = newNormalized
+			updated = true
+		}
+
+		scrobbles = append(scrobbles, scrobble)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return false, fmt.Errorf("read_error: %w", err)
+	}
+
+	// If no changes, skip writing
+	if !updated {
+		return false, nil
+	}
+
+	// In dry-run mode, don't write changes
+	if dryRun {
+		logger.Info("Dry-run: Would update blob",
+			zap.String("blob", blobPath),
+			zap.Int("scrobbles", len(scrobbles)),
+		)
+		return true, nil
+	}
+
+	// Upload updated blob
+	// Create in-memory buffer with NDJSON content
+	var buf strings.Builder
+	for _, scrobble := range scrobbles {
+		data, err := json.Marshal(scrobble)
+		if err != nil {
+			return false, fmt.Errorf("write_error: marshal: %w", err)
+		}
+		buf.Write(data)
+		buf.WriteString("\n")
+	}
+
+	// Upload to Azure
+	content := strings.NewReader(buf.String())
+	_, err = client.UploadStream(ctx, container, blobPath, content, nil)
+	if err != nil {
+		return false, fmt.Errorf("write_error: upload blob: %w", err)
+	}
+
+	return true, nil
 }
 
 // DiscoverLocalFiles finds all NDJSON files matching the username pattern in local storage

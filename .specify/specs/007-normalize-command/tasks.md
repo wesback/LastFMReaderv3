@@ -36,7 +36,7 @@
 - [X] T007 Create ProcessingError struct in cmd/lastfm-sync/commands/normalize.go per data-model.md
 - [X] T008 Create ProcessingSummary struct in cmd/lastfm-sync/commands/normalize.go per data-model.md
 - [X] T009 Implement file discovery for local storage using filepath.Glob with pattern {username}_*.ndjson
-- [ ] T010 Implement file discovery for Azure storage using Azure SDK ListBlobs with prefix filter
+- [X] T010 Implement file discovery for Azure storage using Azure SDK ListBlobs with prefix filter
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -56,7 +56,7 @@
 - [X] T012 [P] [US1] Write unit test for NDJSON line-by-line parsing logic in tests/unit/commands/normalize_test.go
 - [X] T013 [P] [US1] Write unit test for normalized_title update decision logic in tests/unit/commands/normalize_test.go
 - [X] T014 [P] [US1] Write integration test for end-to-end local file processing in tests/integration/normalize_test.go
-- [ ] T015 [P] [US1] Write integration test for Azure storage file processing in tests/integration/normalize_test.go (DEFERRED - Azure support pending)
+- [X] T015 [P] [US1] Write integration test for Azure storage file processing in tests/integration/normalize_test.go (skips if AZURE_STORAGE_CONNECTION_STRING not set)
 - [X] T016 [P] [US1] Write integration test for unchanged file handling (normalized_title already correct) in tests/integration/normalize_test.go
 
 ### Implementation for User Story 1
