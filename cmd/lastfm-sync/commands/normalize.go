@@ -417,21 +417,21 @@ func processAzureFile(ctx context.Context, client *azblob.Client, container, blo
 // Supports both underscore (username_*.ndjson) and dash (username-*.ndjson) patterns
 func DiscoverLocalFiles(username string, logger *logging.Logger) ([]string, error) {
 	baseDir := "." // TODO: Get from config
-	
+
 	// Check for underscore pattern (username_*.ndjson)
 	pattern1 := filepath.Join(baseDir, username+"_*.ndjson")
 	matches1, err := filepath.Glob(pattern1)
 	if err != nil {
 		return nil, fmt.Errorf("glob pattern failed: %w", err)
 	}
-	
+
 	// Check for dash pattern (username-*.ndjson)
 	pattern2 := filepath.Join(baseDir, username+"-*.ndjson")
 	matches2, err := filepath.Glob(pattern2)
 	if err != nil {
 		return nil, fmt.Errorf("glob pattern failed: %w", err)
 	}
-	
+
 	// Combine results
 	allMatches := append(matches1, matches2...)
 	return allMatches, nil
