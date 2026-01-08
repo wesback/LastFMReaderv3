@@ -138,13 +138,13 @@
 - [X] T050 [P] Add table-driven unit tests for various error scenarios in tests/unit/commands/normalize_test.go
 - [ ] T051 [P] Write performance benchmark test targeting 5 seconds per 1000 files (SC-001) in tests/unit/commands/normalize_bench_test.go (DEFERRED - optional)
 - [X] T052 Verify test coverage meets 80%+ requirement using `go test -cover`
-- [ ] T053 [P] Run golint and go vet, fix any issues
-- [ ] T054 [P] Update README.md with normalize command documentation
-- [ ] T055 [P] Update docs/troubleshooting.md with error types and solutions
-- [ ] T056 Verify cyclomatic complexity <10 per function using complexity analysis tool
-- [ ] T057 Run full integration test suite across all user stories
-- [ ] T058 Manual testing on Linux, macOS, Windows platforms
-- [ ] T059 Run quickstart.md validation checklist
+- [X] T053 [P] Run golint and go vet, fix any issues
+- [X] T054 [P] Update README.md with normalize command documentation
+- [X] T055 [P] Update docs/troubleshooting.md with error types and solutions
+- [X] T056 Verify cyclomatic complexity <10 per function using complexity analysis tool
+- [X] T057 Run full integration test suite across all user stories
+- [ ] T058 Manual testing on Linux, macOS, Windows platforms (Linux complete, macOS/Windows pending)
+- [ ] T059 Run quickstart.md validation checklist (pending)
 
 ---
 
