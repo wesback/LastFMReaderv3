@@ -171,7 +171,7 @@ Notes:
 				}
 			} else {
 				// Local storage - discover files via glob
-				logger.Info("Discovering files", zap.String("pattern", username+"_*.ndjson"))
+				logger.Info("Discovering files", zap.String("pattern", username+"_*.ndjson or "+username+"-*.ndjson"))
 				var err error
 				files, err = DiscoverLocalFiles(username, logger)
 				if err != nil {
@@ -289,9 +289,11 @@ func createAzureClient(container, account, authMethod, containerURL, accountKey,
 }
 
 // discoverAzureFiles lists blobs matching the username pattern in Azure Blob Storage
+// Supports both underscore (username_*.ndjson) and dash (username-*.ndjson) patterns
 func discoverAzureFiles(ctx context.Context, client *azblob.Client, container, prefix, username string, logger *logging.Logger) ([]string, error) {
 	var files []string
-	pattern := username + "_"
+	patternUnderscore := username + "_"
+	patternDash := username + "-"
 
 	// Build prefix filter
 	searchPrefix := prefix
@@ -317,8 +319,8 @@ func discoverAzureFiles(ctx context.Context, client *azblob.Client, container, p
 			blobName := *blob.Name
 			baseName := filepath.Base(blobName)
 
-			// Check if it matches the pattern {username}_*.ndjson
-			if strings.HasPrefix(baseName, pattern) && strings.HasSuffix(baseName, ".ndjson") {
+			// Check if it matches either pattern: {username}_*.ndjson or {username}-*.ndjson
+			if (strings.HasPrefix(baseName, patternUnderscore) || strings.HasPrefix(baseName, patternDash)) && strings.HasSuffix(baseName, ".ndjson") {
 				files = append(files, blobName)
 			}
 		}
@@ -412,15 +414,27 @@ func processAzureFile(ctx context.Context, client *azblob.Client, container, blo
 }
 
 // DiscoverLocalFiles finds all NDJSON files matching the username pattern in local storage
+// Supports both underscore (username_*.ndjson) and dash (username-*.ndjson) patterns
 func DiscoverLocalFiles(username string, logger *logging.Logger) ([]string, error) {
-	pattern := username + "_*.ndjson"
 	baseDir := "." // TODO: Get from config
-	fullPattern := filepath.Join(baseDir, pattern)
-	matches, err := filepath.Glob(fullPattern)
+	
+	// Check for underscore pattern (username_*.ndjson)
+	pattern1 := filepath.Join(baseDir, username+"_*.ndjson")
+	matches1, err := filepath.Glob(pattern1)
 	if err != nil {
 		return nil, fmt.Errorf("glob pattern failed: %w", err)
 	}
-	return matches, nil
+	
+	// Check for dash pattern (username-*.ndjson)
+	pattern2 := filepath.Join(baseDir, username+"-*.ndjson")
+	matches2, err := filepath.Glob(pattern2)
+	if err != nil {
+		return nil, fmt.Errorf("glob pattern failed: %w", err)
+	}
+	
+	// Combine results
+	allMatches := append(matches1, matches2...)
+	return allMatches, nil
 }
 
 // ProcessFile processes a single NDJSON file and returns true if it was updated
