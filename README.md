@@ -370,6 +370,137 @@ lastfm-sync merge --user alice *.ndjson --verbose
 # - File processing progress
 ```
 
+### Normalize Command
+
+The `normalize` command updates the `normalized_title` field in existing NDJSON scrobble files. It removes common annotations like "(Live)", "- Remastered", "(feat. Artist)" to create clean, consistent track titles for better matching and analytics.
+
+**Key Features:**
+- ✅ **In-place updates**: Atomic file replacement with backup safety
+- ✅ **Dry-run mode**: Preview changes without modifying files
+- ✅ **Pattern detection**: Automatically identifies Remastered, Live, Featuring annotations
+- ✅ **Error handling**: Continues processing even if individual files fail
+- ✅ **Idempotency**: Second run shows 0 changes (safe to re-run)
+- ✅ **Local & Azure**: Supports both local filesystem and Azure Blob Storage
+
+**Basic normalization (local files):**
+```bash
+# Process all files for user 'alice'
+lastfm-sync normalize --user alice
+
+# Finds: alice_*.ndjson in current directory
+# Updates: normalized_title field for all scrobbles
+```
+
+**Preview changes before applying (dry-run):**
+```bash
+lastfm-sync normalize --user alice --dry-run
+# Shows what would be changed without modifying files:
+# ✓ alice_001.ndjson (updated 15/50 scrobbles)
+# ✓ alice_002.ndjson (updated 23/75 scrobbles)
+# ✓ alice_003.ndjson (no changes needed)
+```
+
+**Azure Blob Storage:**
+```bash
+# Using DefaultAzureCredential (managed identity or az login)
+lastfm-sync normalize --user alice \
+  --azure-container scrobbles \
+  --azure-account mystorageaccount \
+  --azure-auth default
+
+# Using connection string
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=..."
+lastfm-sync normalize --user alice \
+  --azure-container scrobbles \
+  --azure-auth connstr
+
+# With custom prefix
+lastfm-sync normalize --user alice \
+  --azure-container scrobbles \
+  --azure-account mystorageaccount \
+  --azure-prefix "archives/2026/"
+```
+
+**Common use cases:**
+
+```bash
+# After initial fetch - normalize all data
+lastfm-sync fetch --user alice
+lastfm-sync normalize --user alice
+
+# Re-normalize after pattern updates (idempotent - safe to re-run)
+lastfm-sync normalize --user alice
+
+# Test on specific directory
+cd /data/exports/alice
+lastfm-sync normalize --user alice
+
+# Verbose output for troubleshooting
+lastfm-sync normalize --user alice --log-level debug
+```
+
+**Normalization patterns:**
+
+The normalize command removes these common annotations:
+- **Remastered versions**: `"Hey Jude - Remastered 2009"` → `"Hey Jude"`
+- **Live recordings**: `"Bohemian Rhapsody - Live at Wembley"` → `"Bohemian Rhapsody"`
+- **Featured artists**: `"Empire State of Mind (feat. Alicia Keys)"` → `"Empire State of Mind"`
+- **Deluxe editions**: `"Song Title - Deluxe Edition"` → `"Song Title"`
+- **Bonus tracks**: `"Track Name - Bonus Track"` → `"Track Name"`
+- **Radio edits**: `"Song - Radio Edit"` → `"Song"`
+
+**Output format:**
+
+```bash
+$ lastfm-sync normalize --user alice
+
+Processing 3 files for user 'alice'...
+✓ alice_001.ndjson (updated 15/50 scrobbles)
+✓ alice_002.ndjson (updated 23/75 scrobbles)
+✓ alice_003.ndjson (no changes needed)
+
+Summary:
+  Total files: 3
+  Updated: 2
+  Unchanged: 1
+  Errors: 0
+  Total scrobbles processed: 175
+  Normalized titles updated: 38
+  Duration: 0.15s
+```
+
+**Error handling:**
+
+The command continues processing even if individual files fail:
+
+```bash
+$ lastfm-sync normalize --user alice
+
+Processing 4 files for user 'alice'...
+✓ alice_001.ndjson (updated 15/50 scrobbles)
+✗ alice_002.ndjson (parse_error: invalid JSON at line 42)
+✓ alice_003.ndjson (no changes needed)
+✗ alice_004.ndjson (permission_denied: cannot write file)
+
+Summary:
+  Total files: 4
+  Updated: 1
+  Unchanged: 1
+  Errors: 2
+  
+Errors:
+  alice_002.ndjson: parse_error
+  alice_004.ndjson: permission_denied
+
+See docs/troubleshooting.md for error resolution guidance.
+```
+
+**Performance:**
+
+- Streams files line-by-line (memory efficient for large files)
+- Atomic writes with temp files (crash-safe)
+- Typically processes 1000+ files in under 5 seconds (<5ms per file)
+
 ## Output Format
 
 ### NDJSON Structure

@@ -114,7 +114,7 @@ Notes:
 
 			// Discover files
 			logger.Info("Discovering files", zap.String("pattern", username+"_*.ndjson"))
-			files, err := discoverLocalFiles(username, logger)
+			files, err := DiscoverLocalFiles(username, logger)
 			if err != nil {
 				return fmt.Errorf("failed to discover files: %w", err)
 			}
@@ -139,7 +139,7 @@ Notes:
 			for i, filePath := range files {
 				fmt.Printf("Processing: %s [%d/%d]\n", filepath.Base(filePath), i+1, len(files))
 
-				updated, err := processFile(ctx, filePath, dryRun, logger)
+				updated, err := ProcessFile(ctx, filePath, dryRun, logger)
 				if err != nil {
 					logger.Error("Failed to process file",
 						zap.String("file", filePath),
@@ -148,10 +148,10 @@ Notes:
 					summary.ErrorCount++
 					summary.Errors = append(summary.Errors, ProcessingError{
 						FilePath:  filePath,
-						ErrorType: categorizeError(err),
+						ErrorType: CategorizeError(err),
 						Details:   err,
 					})
-					fmt.Printf("  Status: Error: %s\n", categorizeError(err))
+					fmt.Printf("  Status: Error: %s\n", CategorizeError(err))
 				} else if updated {
 					summary.UpdatedFiles++
 					if dryRun {
@@ -185,8 +185,8 @@ Notes:
 	return cmd
 }
 
-// discoverLocalFiles finds all NDJSON files matching the username pattern in local storage
-func discoverLocalFiles(username string, logger *logging.Logger) ([]string, error) {
+// DiscoverLocalFiles finds all NDJSON files matching the username pattern in local storage
+func DiscoverLocalFiles(username string, logger *logging.Logger) ([]string, error) {
 	pattern := username + "_*.ndjson"
 	baseDir := "." // TODO: Get from config
 	fullPattern := filepath.Join(baseDir, pattern)
@@ -197,8 +197,8 @@ func discoverLocalFiles(username string, logger *logging.Logger) ([]string, erro
 	return matches, nil
 }
 
-// processFile processes a single NDJSON file and returns true if it was updated
-func processFile(ctx context.Context, filePath string, dryRun bool, logger *logging.Logger) (bool, error) {
+// ProcessFile processes a single NDJSON file and returns true if it was updated
+func ProcessFile(ctx context.Context, filePath string, dryRun bool, logger *logging.Logger) (bool, error) {
 	// Read file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -307,8 +307,8 @@ func processFile(ctx context.Context, filePath string, dryRun bool, logger *logg
 	return true, nil
 }
 
-// categorizeError determines the error type from an error message
-func categorizeError(err error) string {
+// CategorizeError determines the error type from an error message
+func CategorizeError(err error) string {
 	errStr := err.Error()
 	switch {
 	case strings.Contains(errStr, "parse_error"):

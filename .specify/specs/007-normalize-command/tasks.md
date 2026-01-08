@@ -52,26 +52,26 @@
 
 > **TDD: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T011 [P] [US1] Write unit test for file discovery with various username patterns in tests/unit/commands/normalize_test.go
-- [ ] T012 [P] [US1] Write unit test for NDJSON line-by-line parsing logic in tests/unit/commands/normalize_test.go
-- [ ] T013 [P] [US1] Write unit test for normalized_title update decision logic in tests/unit/commands/normalize_test.go
-- [ ] T014 [P] [US1] Write integration test for end-to-end local file processing in tests/integration/normalize_test.go
-- [ ] T015 [P] [US1] Write integration test for Azure storage file processing in tests/integration/normalize_test.go
-- [ ] T016 [P] [US1] Write integration test for unchanged file handling (normalized_title already correct) in tests/integration/normalize_test.go
+- [X] T011 [P] [US1] Write unit test for file discovery with various username patterns in tests/unit/commands/normalize_test.go
+- [X] T012 [P] [US1] Write unit test for NDJSON line-by-line parsing logic in tests/unit/commands/normalize_test.go
+- [X] T013 [P] [US1] Write unit test for normalized_title update decision logic in tests/unit/commands/normalize_test.go
+- [X] T014 [P] [US1] Write integration test for end-to-end local file processing in tests/integration/normalize_test.go
+- [ ] T015 [P] [US1] Write integration test for Azure storage file processing in tests/integration/normalize_test.go (DEFERRED - Azure support pending)
+- [X] T016 [P] [US1] Write integration test for unchanged file handling (normalized_title already correct) in tests/integration/normalize_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T017 [US1] Implement storage mode detection function in cmd/lastfm-sync/commands/normalize.go (local vs Azure based on flags)
-- [ ] T018 [US1] Implement file list retrieval using file discovery functions from Phase 2
-- [ ] T019 [US1] Implement NDJSON file reader using bufio.Scanner for line-by-line processing in cmd/lastfm-sync/commands/normalize.go
-- [ ] T020 [US1] Implement normalization logic integration calling normalize.Normalize() from internal/normalize package
-- [ ] T021 [US1] Implement comparison logic to detect if normalized_title changed (FR-016)
-- [ ] T022 [US1] Implement file writer for updated records using existing writer abstraction from internal/writer
-- [ ] T023 [US1] Implement per-file error handling with continue-on-error behavior (FR-011)
-- [ ] T024 [US1] Implement ProcessingError collection during file processing
-- [ ] T025 [US1] Implement ProcessingSummary generation with counts (total, updated, unchanged, errors) per FR-010
-- [ ] T026 [US1] Implement summary report output formatting to console per contracts/cli-interface.md
-- [ ] T027 [US1] Run all US1 tests and verify they pass with implementation
+- [X] T017 [US1] Implement storage mode detection function in cmd/lastfm-sync/commands/normalize.go (local vs Azure based on flags)
+- [X] T018 [US1] Implement file list retrieval using file discovery functions from Phase 2
+- [X] T019 [US1] Implement NDJSON file reader using bufio.Scanner for line-by-line processing in cmd/lastfm-sync/commands/normalize.go
+- [X] T020 [US1] Implement normalization logic integration calling normalize.Normalize() from internal/normalize package
+- [X] T021 [US1] Implement comparison logic to detect if normalized_title changed (FR-016)
+- [X] T022 [US1] Implement file writer for updated records using existing writer abstraction from internal/writer
+- [X] T023 [US1] Implement per-file error handling with continue-on-error behavior (FR-011)
+- [X] T024 [US1] Implement ProcessingError collection during file processing
+- [X] T025 [US1] Implement ProcessingSummary generation with counts (total, updated, unchanged, errors) per FR-010
+- [X] T026 [US1] Implement summary report output formatting to console per contracts/cli-interface.md
+- [X] T027 [US1] Run all US1 tests and verify they pass with implementation
 
 **Checkpoint**: User Story 1 complete - basic normalize command works for local and Azure storage
 
@@ -85,18 +85,18 @@
 
 ### Tests for User Story 2 (TDD - Write First)
 
-- [ ] T028 [P] [US2] Write integration test verifying no files modified in dry-run mode in tests/integration/normalize_test.go
-- [ ] T029 [P] [US2] Write integration test comparing dry-run output accuracy against actual run in tests/integration/normalize_test.go
-- [ ] T030 [P] [US2] Write unit test for dry-run flag handling in cmd/lastfm-sync/commands/normalize.go
+- [X] T028 [P] [US2] Write integration test verifying no files modified in dry-run mode in tests/integration/normalize_test.go
+- [X] T029 [P] [US2] Write integration test comparing dry-run output accuracy against actual run in tests/integration/normalize_test.go
+- [X] T030 [P] [US2] Write unit test for dry-run flag handling in cmd/lastfm-sync/commands/normalize.go
 
 ### Implementation for User Story 2
 
-- [ ] T031 [US2] Add --dry-run boolean flag to command definition in cmd/lastfm-sync/commands/normalize.go (FR-008)
-- [ ] T032 [US2] Pass dry-run flag to file writer abstraction to prevent writes when active
-- [ ] T033 [US2] Implement dry-run preview output showing current and new normalized_title values (FR-017)
-- [ ] T034 [US2] Update ProcessingSummary to include dry-run status field
-- [ ] T035 [US2] Update summary report to display "Dry-run mode: No changes written to storage" when active (FR-013)
-- [ ] T036 [US2] Run all US2 tests and verify they pass with implementation
+- [X] T031 [US2] Add --dry-run boolean flag to command definition in cmd/lastfm-sync/commands/normalize.go (FR-008)
+- [X] T032 [US2] Pass dry-run flag to file writer abstraction to prevent writes when active
+- [X] T033 [US2] Implement dry-run preview output showing current and new normalized_title values (FR-017)
+- [X] T034 [US2] Update ProcessingSummary to include dry-run status field
+- [X] T035 [US2] Update summary report to display "Dry-run mode: No changes written to storage" when active (FR-013)
+- [X] T036 [US2] Run all US2 tests and verify they pass with implementation
 
 **Checkpoint**: User Stories 1 AND 2 both work independently - dry-run safety feature complete
 
@@ -110,20 +110,20 @@
 
 ### Tests for User Story 3 (TDD - Write First)
 
-- [ ] T037 [P] [US3] Write integration test for progress bar display validation in tests/integration/normalize_test.go
-- [ ] T038 [P] [US3] Write integration test for error handling with malformed NDJSON files in tests/integration/normalize_test.go
-- [ ] T039 [P] [US3] Write integration test verifying processing continues after errors in tests/integration/normalize_test.go
-- [ ] T040 [P] [US3] Write unit test for error summary formatting in tests/unit/commands/normalize_test.go
+- [ ] T037 [P] [US3] Write integration test for progress bar display validation in tests/integration/normalize_test.go (SKIPPED - output-based testing)
+- [X] T038 [P] [US3] Write integration test for error handling with malformed NDJSON files in tests/integration/normalize_test.go
+- [X] T039 [P] [US3] Write integration test verifying processing continues after errors in tests/integration/normalize_test.go
+- [X] T040 [P] [US3] Write unit test for error summary formatting in tests/unit/commands/normalize_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T041 [US3] Initialize progress bar using internal/progress.NewFactory with total file count
-- [ ] T042 [US3] Implement per-file progress updates showing current filename in progress description (FR-009)
-- [ ] T043 [US3] Implement structured error collection with ProcessingError for each file failure (FR-012)
-- [ ] T044 [US3] Update summary report to include error list with file path and error type format (e.g., "file.ndjson: parse error")
-- [ ] T045 [US3] Implement error categorization (parse_error, missing_track_field, permission_denied, read_error, write_error)
-- [ ] T046 [US3] Add duration tracking to ProcessingSummary
-- [ ] T047 [US3] Run all US3 tests and verify they pass with implementation
+- [X] T041 [US3] Initialize progress bar using internal/progress.NewFactory with total file count
+- [X] T042 [US3] Implement per-file progress updates showing current filename in progress description (FR-009)
+- [X] T043 [US3] Implement structured error collection with ProcessingError for each file failure (FR-012)
+- [X] T044 [US3] Update summary report to include error list with file path and error type format (e.g., "file.ndjson: parse error")
+- [X] T045 [US3] Implement error categorization (parse_error, missing_track_field, permission_denied, read_error, write_error)
+- [X] T046 [US3] Add duration tracking to ProcessingSummary
+- [X] T047 [US3] Run all US3 tests and verify they pass with implementation
 
 **Checkpoint**: All user stories independently functional - progress and error reporting complete
 
@@ -133,11 +133,11 @@
 
 **Purpose**: Final quality improvements affecting all user stories
 
-- [ ] T048 [P] Add command help text with description, flags, and examples in cmd/lastfm-sync/commands/normalize.go
-- [ ] T049 [P] Add edge case unit tests for missing track field, malformed NDJSON, no files found in tests/unit/commands/normalize_test.go
-- [ ] T050 [P] Add table-driven unit tests for various error scenarios in tests/unit/commands/normalize_test.go
-- [ ] T051 [P] Write performance benchmark test targeting 5 seconds per 1000 files (SC-001) in tests/unit/commands/normalize_bench_test.go
-- [ ] T052 Verify test coverage meets 80%+ requirement using `go test -cover`
+- [X] T048 [P] Add command help text with description, flags, and examples in cmd/lastfm-sync/commands/normalize.go
+- [X] T049 [P] Add edge case unit tests for missing track field, malformed NDJSON, no files found in tests/unit/commands/normalize_test.go
+- [X] T050 [P] Add table-driven unit tests for various error scenarios in tests/unit/commands/normalize_test.go
+- [ ] T051 [P] Write performance benchmark test targeting 5 seconds per 1000 files (SC-001) in tests/unit/commands/normalize_bench_test.go (DEFERRED - optional)
+- [X] T052 Verify test coverage meets 80%+ requirement using `go test -cover`
 - [ ] T053 [P] Run golint and go vet, fix any issues
 - [ ] T054 [P] Update README.md with normalize command documentation
 - [ ] T055 [P] Update docs/troubleshooting.md with error types and solutions
