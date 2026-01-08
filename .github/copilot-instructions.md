@@ -7,6 +7,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-06
 - N/A (UI component only) (005-console-progress-bar)
 - Go 1.24.0+ (alpine-based Docker build) (002-containerization-documentation)
 - Go 1.24.0+ + `crypto/sha256`, `bufio.Scanner`, `encoding/json` (006-scrobble-dedup-merge)
+- Local filesystem and Azure Blob Storage (via existing `writer` abstraction) (007-normalize-command)
 
 ## Project Structure
 
@@ -50,10 +51,9 @@ Go 1.24.0+ (006-scrobble-dedup-merge): Follow standard Go conventions
   - Table-driven tests for strategy variations
 
 ## Recent Changes
+- 007-normalize-command: Added Go 1.24.0+
 - 006-scrobble-dedup-merge: Added merge command for deduplicating and merging multiple NDJSON scrobble files. Uses in-memory hash map with SHA256 keys. Supports 4 deduplication strategies (default/strict/relaxed/mbid) and 3 conflict resolution modes (completeness/first/last). Includes checkpointing for resume capability. Performance targets: ≥10K scrobbles/sec, <500MB for 1M records. Reuses existing internal/writer, internal/progress, internal/models packages.
 - 005-console-progress-bar: Added Go 1.24.0+ + `github.com/schollz/progressbar/v3`, `golang.org/x/term`
-- 004-normalized-title-field: Adding `normalized_title` field to remove annotations (Live, Remastered, featuring, etc.) from track titles for better matching and grouping. Uses internal/normalize package with gopkg.in/yaml.v3 for configuration. DEBUG logging when titles modified.
-- 002-containerization-documentation: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
 <!-- MANUAL ADDITIONS START -->
 If you notice any systemic issues please add the needed requirements to this file or to the constitution if that is more appropriate.

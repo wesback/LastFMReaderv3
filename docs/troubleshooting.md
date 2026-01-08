@@ -1105,6 +1105,267 @@ lastfm-sync merge --user alice *.ndjson --strategy relaxed --verbose 2>&1 | grep
 
 ---
 
+### Normalize Command Issues
+
+#### Error: `no files found for user`
+
+**Symptom:**
+```
+Error: no files found for user 'alice'
+Action: Check username is correct and files exist matching pattern {username}_*.ndjson
+```
+
+**Cause:** No files matching the expected pattern `{username}_*.ndjson` in the current directory (or Azure container).
+
+**Solution:**
+```bash
+# Check files exist
+ls -lh alice_*.ndjson
+
+# Verify filename format (must have underscore separator)
+# ✓ Correct: alice_001.ndjson, alice_20240101.ndjson
+# ✗ Wrong: alice.ndjson, alice-001.ndjson, alice001.ndjson
+
+# Change to directory containing files
+cd /data/exports/alice
+lastfm-sync normalize --user alice
+
+# For Azure, check container and prefix
+az storage blob list \
+  --container-name scrobbles \
+  --account-name myaccount \
+  --prefix "alice_" \
+  --query "[].name"
+```
+
+---
+
+#### Error: `parse_error` - Malformed JSON
+
+**Symptom:**
+```
+✗ alice_002.ndjson (parse_error: invalid character '}' after object key)
+
+Errors:
+  alice_002.ndjson: parse_error
+```
+
+**Cause:** File contains invalid JSON (corrupted download, manual edit, encoding issues).
+
+**Solution:**
+```bash
+# Find problematic line
+grep -n '[^}]$' alice_002.ndjson | head -5
+
+# Validate JSON structure
+jq -c '.' alice_002.ndjson > /dev/null
+# Shows line number of first error
+
+# Repair with jq (removes invalid lines)
+jq -c 'select(. != null)' alice_002.ndjson > alice_002_repaired.ndjson
+
+# Re-fetch if repair fails
+rm alice_002.ndjson
+lastfm-sync fetch --user alice
+```
+
+---
+
+#### Error: `missing_track_field`
+
+**Symptom:**
+```
+✗ alice_003.ndjson (missing_track_field: line 42)
+
+Errors:
+  alice_003.ndjson: missing_track_field
+```
+
+**Cause:** Scrobble record missing required `track` field (API returned incomplete data).
+
+**Solution:**
+```bash
+# Inspect problematic records
+jq 'select(.track == null or .track == "")' alice_003.ndjson
+
+# Remove records without track field
+jq -c 'select(.track != null and .track != "")' alice_003.ndjson > alice_003_clean.ndjson
+
+# Verify clean file
+jq -s 'length' alice_003_clean.ndjson
+# Should show fewer records than original
+
+# Re-run normalize on clean file
+mv alice_003_clean.ndjson alice_003.ndjson
+lastfm-sync normalize --user alice
+```
+
+---
+
+#### Error: `permission_denied`
+
+**Symptom:**
+```
+✗ alice_004.ndjson (permission_denied: cannot write file)
+
+Errors:
+  alice_004.ndjson: permission_denied
+```
+
+**Cause:** No write permission to file or directory.
+
+**Solution:**
+```bash
+# Check file permissions
+ls -l alice_004.ndjson
+# Should show: -rw-r--r-- (644) or similar writable permissions
+
+# Fix file permissions
+chmod 644 alice_004.ndjson
+
+# Fix directory permissions
+chmod 755 $(dirname alice_004.ndjson)
+
+# Check disk space
+df -h .
+# Ensure sufficient space for temp files (2x file size needed)
+
+# For Azure, check write permissions
+az storage blob show \
+  --container-name scrobbles \
+  --name alice_004.ndjson \
+  --account-name myaccount \
+  --query "properties.lease"
+# If leased, wait for lease to expire or break it
+```
+
+---
+
+#### No changes detected on second run (expected)
+
+**Symptom:**
+```
+✓ alice_001.ndjson (no changes needed)
+✓ alice_002.ndjson (no changes needed)
+
+Summary:
+  Total files: 2
+  Updated: 0
+  Unchanged: 2
+```
+
+**Cause:** This is **normal behavior** - the command is idempotent. Normalized titles are already correct.
+
+**Solution:** No action needed. This confirms:
+- ✅ Files were successfully normalized on previous run
+- ✅ Safe to re-run (idempotency works correctly)
+- ✅ No data corruption detected
+
+---
+
+#### Dry-run shows changes but actual run doesn't update
+
+**Symptom:**
+```bash
+# Dry-run shows updates
+$ lastfm-sync normalize --user alice --dry-run
+✓ alice_001.ndjson (would update 15/50 scrobbles)
+
+# Actual run shows no changes
+$ lastfm-sync normalize --user alice
+✓ alice_001.ndjson (no changes needed)
+```
+
+**Cause:** File was modified between dry-run and actual run (by another process or concurrent run).
+
+**Solution:**
+```bash
+# Verify file modification time
+stat alice_001.ndjson
+
+# Check for concurrent processes
+ps aux | grep lastfm-sync
+
+# Run with verbose logging to see details
+lastfm-sync normalize --user alice --log-level debug
+
+# If issue persists, inspect normalized_title fields
+jq -r '[.track, .normalized_title] | @tsv' alice_001.ndjson | head -20
+# Compare track vs normalized_title to see if already normalized
+```
+
+---
+
+#### Azure authentication failures
+
+**Symptom:**
+```
+Error: failed to authenticate with Azure: DefaultAzureCredential authentication failed
+```
+
+**Cause:** Azure credentials not configured or expired.
+
+**Solution:**
+```bash
+# Login with Azure CLI
+az login
+
+# Verify authentication
+az account show
+
+# Use alternative auth method (connection string)
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=..."
+lastfm-sync normalize --user alice \
+  --azure-container scrobbles \
+  --azure-auth connstr
+
+# Use managed identity (when running in Azure)
+lastfm-sync normalize --user alice \
+  --azure-container scrobbles \
+  --azure-account myaccount \
+  --azure-auth mi
+
+# Check Azure IAM roles
+az role assignment list \
+  --assignee $(az account show --query user.name -o tsv) \
+  --scope /subscriptions/.../resourceGroups/.../providers/Microsoft.Storage/storageAccounts/myaccount
+# Requires: Storage Blob Data Contributor or Owner
+```
+
+---
+
+#### Processing is slow (>5ms per file)
+
+**Symptom:** Normalize command takes longer than expected (>5 seconds for 1000 files).
+
+**Cause:** Large files, slow disk I/O, or network latency (Azure).
+
+**Solution:**
+```bash
+# Check file sizes
+du -sh alice_*.ndjson
+
+# Use verbose logging to identify bottlenecks
+lastfm-sync normalize --user alice --log-level debug
+
+# For Azure, use premium storage tier
+# Standard: ~50-100ms per blob
+# Premium: ~10-20ms per blob
+
+# Run from same Azure region as storage account
+# Cross-region: +100-300ms latency
+
+# Optimize disk I/O (Linux)
+# Mount with noatime for faster reads
+sudo mount -o remount,noatime /data
+
+# Benchmark performance
+time lastfm-sync normalize --user alice
+# Target: <5s for 1000 files (<5ms per file)
+```
+
+---
+
 ### Watermark and State Issues
 
 ### Error: `failed to create watermark file`
